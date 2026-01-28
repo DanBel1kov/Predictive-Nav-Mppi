@@ -1,0 +1,65 @@
+#pragma once
+
+#include <array>
+#include <vector>
+
+#include "nav2_costmap_2d/costmap_2d.hpp"
+
+
+namespace nav2_controllers
+{
+
+struct MPPIParams
+{
+  double dt = 0.1;
+  int horizon_steps = 20;
+  int n_rollouts = 200;
+
+  double v_mean = 0.2;
+  double omega_mean = 0.0;
+
+  double v_std = 0.04;
+  double omega_std = 0.25;
+
+  double v_min = -0.05;
+  double v_max = 0.15;
+  double omega_min = -1.0;
+  double omega_max = 1.0;
+
+  double w_goal = 1.0;
+  double w_obs = 50.0;
+  double w_ctrl = 0.3;
+  double w_speed = 0.1;
+
+  double lambda = 1.0;
+};
+
+class MPPIController
+{
+public:
+  explicit MPPIController(const MPPIParams & params = MPPIParams());
+
+  /// x0 = [x, y, theta]
+  /// goal = [x_goal, y_goal]
+  /// costmap может быть nullptr
+  std::array<double, 2> computeControl(
+    const std::array<double, 3> & x0,
+    const std::array<double, 2> & goal,
+    const nav2_costmap_2d::Costmap2D * costmap);
+
+private:
+  std::array<double, 3> dynamics(
+    const std::array<double, 3> & x,
+    const std::array<double, 2> & u) const;
+
+  double stageCost(
+    const std::array<double, 3> & x,
+    const std::array<double, 2> & u,
+    const std::array<double, 2> & goal,
+    const nav2_costmap_2d::Costmap2D * costmap) const;
+
+  MPPIParams p_;
+  std::vector<double> u_seq_;
+};
+
+}  // namespace my_nav2_controllers

@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<library path="mppi_nav2_controller">
+  <class
+    name="nav2_controllers::MppiNav2Controller"
+    type="nav2_controllers::MppiNav2Controller"
+    base_class_type="nav2_core::Controller">
+    <description>
+      MPPI-based local controller using Nav2 Costmap2D.
+    </description>
+  </class>
+</library>
+

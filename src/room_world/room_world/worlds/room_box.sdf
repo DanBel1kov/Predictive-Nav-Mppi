@@ -1,0 +1,65 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="room_box">
+    <physics type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+
+    <include><uri>model://ground_plane</uri></include>
+    <include><uri>model://sun</uri></include>
+
+    <!-- north/south walls -->
+    <model name="wall_north">
+      <static>true</static>
+      <pose>0 5 1 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>10 0.2 2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>10 0.2 2</size></box></geometry></visual>
+      </link>
+    </model>
+
+    <model name="wall_south">
+      <static>true</static>
+      <pose>0 -5 1 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>10 0.2 2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>10 0.2 2</size></box></geometry></visual>
+      </link>
+    </model>
+
+    <!-- east/west walls -->
+    <model name="wall_east">
+      <static>true</static>
+      <pose>5 0 1 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.2 10 2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.2 10 2</size></box></geometry></visual>
+      </link>
+    </model>
+
+    <model name="wall_west">
+      <static>true</static>
+      <pose>-5 0 1 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.2 10 2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.2 10 2</size></box></geometry></visual>
+      </link>
+    </model>
+
+    <!-- optional obstacle -->
+    <model name="pillar">
+      <static>true</static>
+      <pose>1 1 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><cylinder><radius>0.3</radius><length>1.0</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.3</radius><length>1.0</length></cylinder></geometry>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>

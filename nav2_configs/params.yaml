@@ -1,0 +1,75 @@
+nav2_controller:
+  ros__parameters:
+    use_sim_time: True
+    controller_frequency: 10.0
+    FollowPath:
+      plugin: "nav2_controllers::MppiNav2Controller"
+      debug_trajectory_details: False
+      # Обязательно: список критиков
+      critics:
+        - RotateToGoal
+        - ObstacleFootprint
+        - GoalDist
+        - PathAlign
+        - PathDist
+        - GoalAlign
+      ObstacleFootprint.scale: 0.01
+      PathAlign.scale: 32.0
+      PathDist.scale: 32.0
+      GoalAlign.scale: 24.0
+      GoalDist.scale: 24.0
+
+planner_server:
+  ros__parameters:
+    use_sim_time: True
+    planner_plugins: ["GridBased"]
+    GridBased:
+      plugin: "nav2_navfn_planner/NavfnPlanner"
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      use_sim_time: True
+      global_frame: map
+      robot_base_frame: base_link
+      rolling_window: True
+      resolution: 0.05
+      width: 3         # ЦЕЛОЕ
+      height: 3        # ЦЕЛОЕ
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: True
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        observation_sources: "scan"
+        scan:
+          topic: /scan
+          max_obstacle_height: 2.0
+          clearing: True
+          marking: True
+          inf_is_valid: True
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        inflation_radius: 0.55
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      use_sim_time: True
+      global_frame: map
+      robot_base_frame: base_link
+      resolution: 0.05
+      width: 10        # ЦЕЛОЕ
+      height: 10       # ЦЕЛОЕ
+      plugins: ["static_layer", "inflation_layer"]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: True
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        inflation_radius: 0.75
+
+bt_navigator:
+  ros__parameters:
+    use_sim_time: True
