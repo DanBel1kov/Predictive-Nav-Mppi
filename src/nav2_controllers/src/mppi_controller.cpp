@@ -56,20 +56,22 @@ double MPPIController::stageCost(
     unsigned int mx, my;
     if (costmap->worldToMap(x[0], x[1], mx, my)) {
       const unsigned char c = costmap->getCost(mx, my);
+      double obstacle_penalty = 0.0;
 
       if (c == nav2_costmap_2d::LETHAL_OBSTACLE ||
-          c == nav2_costmap_2d::INSCRIBED_INFLATED_OBSTACLE ||
-          c == nav2_costmap_2d::NO_INFORMATION) {
-        // очень сильный штраф за коллизию / неизвестность
-        cost += p_.w_obs * 1000.0;
+          c == nav2_costmap_2d::INSCRIBED_INFLATED_OBSTACLE) {
+        obstacle_penalty = p_.w_obs * 8.0;
+      } else if (c == nav2_costmap_2d::NO_INFORMATION) {
+        obstacle_penalty = p_.w_obs * 4.0;
       } else {
-        // нормализуем [0..252] → [0..1] и добавляем штраф
         const double norm = static_cast<double>(c) / 252.0;
-        cost += p_.w_obs * norm;
+        obstacle_penalty = p_.w_obs * norm * norm;
       }
+
+      cost += obstacle_penalty;
     } else {
       // точка вне карты — тоже считаем плохо
-      cost += p_.w_obs * 1000.0;
+      cost += p_.w_obs * 8.0;
     }
   }
 

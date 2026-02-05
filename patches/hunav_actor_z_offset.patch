@@ -1,0 +1,79 @@
+--- a/include/hunav_gazebo_wrapper/WorldGenerator.hpp
++++ b/include/hunav_gazebo_wrapper/WorldGenerator.hpp
+@@ -93,6 +93,7 @@
+   std::string plug_navgoal_topic_;
+   double plug_update_rate_;
+   double actor_scale_;
++  double actor_z_offset_;
+   std::string plug_robot_name_;
+   std::string plug_global_frame_;
+   std::vector<std::string> plug_ignore_models_;
+--- a/src/WorldGenerator.cpp
++++ b/src/WorldGenerator.cpp
+@@ -101,6 +101,7 @@
+   plug_use_collision_ = this->declare_parameter<bool>("use_collision", false);
+   plug_update_rate_ = this->declare_parameter<double>("update_rate", 100.0);
+   actor_scale_ = this->declare_parameter<double>("actor_scale", 1.0);
++  actor_z_offset_ = this->declare_parameter<double>("actor_z_offset", 0.0);
+   plug_robot_name_ = this->declare_parameter<std::string>("robot_name", std::string("robot"));
+   RCLCPP_INFO(this->get_logger(), "Robot name: %s", plug_robot_name_.c_str());
+   plug_global_frame_ = this->declare_parameter<std::string>("global_frame_to_publish", std::string("map"));
+@@ -421,6 +422,9 @@
+   tinyxml2::XMLElement* pGoalTopic = doc.NewElement("navgoal_topic");
+   pGoalTopic->SetText(plug_navgoal_topic_.c_str());
+ 
++  tinyxml2::XMLElement* pActorZ = doc.NewElement("actor_z_offset");
++  pActorZ->SetText(actor_z_offset_);
++
+   tinyxml2::XMLElement* pIgnoreModels = doc.NewElement("ignore_models");
+   std::vector<tinyxml2::XMLElement*> pModels;
+   for (std::string st : plug_ignore_models_)
+@@ -467,7 +471,8 @@
+   plugin->InsertAfterChild(pGazebo, pGlobalFrame);
+   plugin->InsertAfterChild(pGlobalFrame, pUseGoal);
+   plugin->InsertAfterChild(pUseGoal, pGoalTopic);
+-  plugin->InsertAfterChild(pGoalTopic, pIgnoreModels);
++  plugin->InsertAfterChild(pGoalTopic, pActorZ);
++  plugin->InsertAfterChild(pActorZ, pIgnoreModels);
+   tinyxml2::XMLElement* ignore =
+       doc.FirstChildElement("sdf")->FirstChildElement("world")->FirstChildElement("plugin")->FirstChildElement(
+           "ignore_models");
+--- a/src/HuNavPlugin.cpp
++++ b/src/HuNavPlugin.cpp
+@@ -129,6 +129,7 @@
+   bool waitForGoal;
+   bool goalReceived;
+   bool useCollision;
++  double actorZOffset;
+   std::string goalTopic;
+ 
+   /// \brief List of models to ignore. Used for vector field
+@@ -166,6 +167,12 @@
+   else
+     hnav_->globalFrame = "map";
+ 
++  if (_sdf->HasElement("actor_z_offset"))
++    hnav_->actorZOffset = _sdf->Get<double>("actor_z_offset");
++  else
++    hnav_->actorZOffset = 0.0;
++  RCLCPP_INFO(hnav_->rosnode->get_logger(), "actor_z_offset: %.3f", hnav_->actorZOffset);
++
+   if (_sdf->HasElement("use_navgoal_to_start"))
+     hnav_->waitForGoal = _sdf->Get<bool>("use_navgoal_to_start");
+   else
+@@ -444,6 +451,7 @@
+       auto entity_ang_vel = gazebo_ros::Convert<ignition::math::Vector3d>(agent.velocity.angular);
+       actorPose.Pos().X(agent.position.position.x);
+       actorPose.Pos().Y(agent.position.position.y);
++      actorPose.Pos().Z(agent.position.position.z + actorZOffset);
+       actorPose.Rot() = ignition::math::Quaterniond(1.5707, 0, yaw);
+       model->SetWorldPose(actorPose);
+       if (useCollision)
+@@ -985,6 +993,7 @@
+           default:
+             break;
+         }
++        actorPose.Pos().Z(actorPose.Pos().Z() + actorZOffset);
+       }
+     }
+ 

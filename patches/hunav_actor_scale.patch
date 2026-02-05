@@ -1,0 +1,49 @@
+diff --git a/include/hunav_gazebo_wrapper/WorldGenerator.hpp b/include/hunav_gazebo_wrapper/WorldGenerator.hpp
+index 4c1e6e3..4cc4a8b 100755
+--- a/include/hunav_gazebo_wrapper/WorldGenerator.hpp
++++ b/include/hunav_gazebo_wrapper/WorldGenerator.hpp
+@@ -91,6 +91,7 @@ private:
+   bool plug_use_collision_;
+   std::string plug_navgoal_topic_;
+   double plug_update_rate_;
++  double actor_scale_;
+   std::string plug_robot_name_;
+   std::string plug_global_frame_;
+   std::vector<std::string> plug_ignore_models_;
+diff --git a/src/WorldGenerator.cpp b/src/WorldGenerator.cpp
+index 2b9d7a6..5a08b1b 100644
+--- a/src/WorldGenerator.cpp
++++ b/src/WorldGenerator.cpp
+@@ -100,6 +100,7 @@ WorldGenerator::WorldGenerator()
+   plug_use_gazebo_obs_ = this->declare_parameter<bool>("use_gazebo_obs", false);
+   plug_use_collision_ = this->declare_parameter<bool>("use_collision", false);
+   plug_update_rate_ = this->declare_parameter<double>("update_rate", 100.0);
++  actor_scale_ = this->declare_parameter<double>("actor_scale", 1.0);
+   plug_robot_name_ = this->declare_parameter<std::string>("robot_name", std::string("robot"));
+   RCLCPP_INFO(this->get_logger(), "Robot name: %s", plug_robot_name_.c_str());
+   plug_global_frame_ = this->declare_parameter<std::string>("global_frame_to_publish", std::string("map"));
+@@ -496,7 +497,7 @@ void WorldGenerator::generateWorld()
+     tinyxml2::XMLElement* pFilename = doc.NewElement("filename");
+     pFilename->SetText(skin_filename[a.skin].c_str());
+     tinyxml2::XMLElement* pScale = doc.NewElement("scale");
+-    pScale->SetText(1.0);
++    pScale->SetText(actor_scale_);
+ 
+     // Set no_active animation
+     tinyxml2::XMLElement* pAnimation = doc.NewElement("animation");
+@@ -524,7 +525,7 @@ void WorldGenerator::generateWorld()
+     }
+ 
+     tinyxml2::XMLElement* pScale1 = doc.NewElement("scale");
+-    pScale1->SetText(1.0);
++    pScale1->SetText(actor_scale_);
+     tinyxml2::XMLElement* pInterpolate = doc.NewElement("interpolate_x");
+     pInterpolate->SetText("true");
+@@ -560,7 +561,7 @@ void WorldGenerator::generateWorld()
+     }
+ 
+     tinyxml2::XMLElement* pScale2 = doc.NewElement("scale");
+-    pScale2->SetText(1.0);
++    pScale2->SetText(actor_scale_);
+     tinyxml2::XMLElement* pInterpolate1 = doc.NewElement("interpolate_x");
+     pInterpolate1->SetText("true");
