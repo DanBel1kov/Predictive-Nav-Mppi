@@ -23,7 +23,7 @@ def _make_nodes(context, *args, **kwargs):
         parameters=[{
             'base_world': base_world,
             'use_gazebo_obs': False,
-            'use_collision': False,
+            'use_collision': True,
             'update_rate': 100.0,
             'robot_name': 'waffle',
             'global_frame_to_publish': 'map',

@@ -45,7 +45,7 @@ bt_navigator:
     global_frame: map
     robot_base_frame: base_footprint
     odom_topic: /odom
-    bt_loop_duration: 10
+    bt_loop_duration: 100
     default_server_timeout: 20
     wait_for_service_timeout: 1000
     # 'default_nav_through_poses_bt_xml' and 'default_nav_to_pose_bt_xml' are use defaults:
@@ -133,6 +133,24 @@ controller_server:
       yaw_goal_tolerance: 0.50
     FollowPath:
       plugin: "nav2_controllers::MppiNav2Controller"
+      dt: 0.1
+      horizon_steps: 30
+      n_rollouts: 200
+      v_mean: 0.2
+      omega_mean: 0.0
+      v_std: 0.06
+      omega_std: 0.30
+      v_min: -0.1
+      v_max: 0.25
+      omega_min: -1.5
+      omega_max: 1.5
+      w_goal: 1.0
+      w_obs: 25.0
+      w_ctrl: 0.3
+      w_speed: 0.2
+      w_path: 2.0
+      lambda: 1.0
+      goal_lookahead_dist: 0.6
 
 local_costmap:
   local_costmap:
@@ -142,25 +160,20 @@ local_costmap:
       global_frame: odom
       robot_base_frame: base_footprint
       use_sim_time: True
+      transform_tolerance: 0.3
       rolling_window: true
       width: 5
       height: 5
       resolution: 0.05
       robot_radius: 0.22
-      plugins: ["voxel_layer", "inflation_layer"]
+      plugins: ["obstacle_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 5.0
-        inflation_radius: 0.40
-      voxel_layer:
-        plugin: "nav2_costmap_2d::VoxelLayer"
+        cost_scaling_factor: 15.0
+        inflation_radius: 0.3
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
-        publish_voxel_map: True
-        origin_z: 0.0
-        z_resolution: 0.05
-        z_voxels: 16
-        max_obstacle_height: 2.0
-        mark_threshold: 0
         observation_sources: scan
         scan:
           topic: /scan
@@ -168,6 +181,9 @@ local_costmap:
           clearing: True
           marking: True
           data_type: "LaserScan"
+          inf_is_valid: True
+          observation_persistence: 0.0
+          expected_update_rate: 0.0
           raytrace_max_range: 3.0
           raytrace_min_range: 0.0
           obstacle_max_range: 2.5
@@ -185,6 +201,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_footprint
       use_sim_time: True
+      transform_tolerance: 0.3
       width: 20
       height: 20
       origin_x: -10.0
@@ -194,28 +211,14 @@ global_costmap:
       robot_radius: 0.22
       resolution: 0.05
       track_unknown_space: true
-      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
-      obstacle_layer:
-        plugin: "nav2_costmap_2d::ObstacleLayer"
-        enabled: True
-        observation_sources: scan
-        scan:
-          topic: /scan
-          max_obstacle_height: 2.0
-          clearing: True
-          marking: True
-          data_type: "LaserScan"
-          raytrace_max_range: 3.0
-          raytrace_min_range: 0.0
-          obstacle_max_range: 2.5
-          obstacle_min_range: 0.0
+      plugins: ["static_layer", "inflation_layer"]
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.55
+        cost_scaling_factor: 8.0
+        inflation_radius: 0.3
       always_send_full_costmap: True
 
 map_server:

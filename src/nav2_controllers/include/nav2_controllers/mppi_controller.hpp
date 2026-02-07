@@ -30,6 +30,7 @@ struct MPPIParams
   double w_obs = 50.0;
   double w_ctrl = 0.3;
   double w_speed = 0.1;
+  double w_path = 1.0;
 
   double lambda = 1.0;
 };
@@ -45,7 +46,8 @@ public:
   std::array<double, 2> computeControl(
     const std::array<double, 3> & x0,
     const std::array<double, 2> & goal,
-    const nav2_costmap_2d::Costmap2D * costmap);
+    const nav2_costmap_2d::Costmap2D * costmap,
+    const std::vector<std::array<double, 2>> * path_xy = nullptr);
 
 private:
   std::array<double, 3> dynamics(
@@ -56,7 +58,8 @@ private:
     const std::array<double, 3> & x,
     const std::array<double, 2> & u,
     const std::array<double, 2> & goal,
-    const nav2_costmap_2d::Costmap2D * costmap) const;
+    const nav2_costmap_2d::Costmap2D * costmap,
+    const std::vector<std::array<double, 2>> * path_xy) const;
 
   MPPIParams p_;
   std::vector<double> u_seq_;

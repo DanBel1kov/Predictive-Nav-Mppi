@@ -10,6 +10,10 @@
     <include><uri>model://ground_plane</uri></include>
     <include><uri>model://sun</uri></include>
 
+    <scene>
+      <shadows>false</shadows>
+    </scene>
+
     <!-- north/south walls -->
     <model name="wall_north">
       <static>true</static>

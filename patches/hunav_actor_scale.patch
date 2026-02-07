@@ -1,49 +1,114 @@
 diff --git a/include/hunav_gazebo_wrapper/WorldGenerator.hpp b/include/hunav_gazebo_wrapper/WorldGenerator.hpp
-index 4c1e6e3..4cc4a8b 100755
+index b73f654..c0eb1d5 100755
 --- a/include/hunav_gazebo_wrapper/WorldGenerator.hpp
 +++ b/include/hunav_gazebo_wrapper/WorldGenerator.hpp
-@@ -91,6 +91,7 @@ private:
+@@ -92,6 +92,8 @@ private:
    bool plug_use_collision_;
    std::string plug_navgoal_topic_;
    double plug_update_rate_;
 +  double actor_scale_;
++  double actor_z_offset_;
    std::string plug_robot_name_;
    std::string plug_global_frame_;
    std::vector<std::string> plug_ignore_models_;
+diff --git a/src/HuNavPlugin.cpp b/src/HuNavPlugin.cpp
+index da53895..f459bee 100644
+--- a/src/HuNavPlugin.cpp
++++ b/src/HuNavPlugin.cpp
+@@ -129,6 +129,7 @@ public:
+   bool waitForGoal;
+   bool goalReceived;
+   bool useCollision;
++  double actorZOffset;
+   std::string goalTopic;
+ 
+   /// \brief List of models to ignore. Used for vector field
+@@ -166,6 +167,13 @@ void HuNavPlugin::Load(gazebo::physics::WorldPtr _world, sdf::ElementPtr _sdf)
+   else
+     hnav_->globalFrame = "map";
+ 
++  if (_sdf->HasElement("actor_z_offset"))
++    hnav_->actorZOffset = _sdf->Get<double>("actor_z_offset");
++  else
++    hnav_->actorZOffset = 0.0;
++  RCLCPP_INFO(hnav_->rosnode->get_logger(), "actor_z_offset: %.3f", hnav_->actorZOffset);
++
++
+   if (_sdf->HasElement("use_navgoal_to_start"))
+     hnav_->waitForGoal = _sdf->Get<bool>("use_navgoal_to_start");
+   else
+@@ -444,6 +452,7 @@ void HuNavPluginPrivate::InitializeAgents()
+       auto entity_ang_vel = gazebo_ros::Convert<ignition::math::Vector3d>(agent.velocity.angular);
+       actorPose.Pos().X(agent.position.position.x);
+       actorPose.Pos().Y(agent.position.position.y);
++      actorPose.Pos().Z(agent.position.position.z + actorZOffset);
+       actorPose.Rot() = ignition::math::Quaterniond(1.5707, 0, yaw);
+       model->SetWorldPose(actorPose);
+       if (useCollision)
+@@ -985,6 +994,7 @@ void HuNavPluginPrivate::UpdateGazeboPedestrians(const gazebo::common::UpdateInf
+           default:
+             break;
+         }
++        actorPose.Pos().Z(actorPose.Pos().Z() + actorZOffset);
+       }
+     }
+ 
 diff --git a/src/WorldGenerator.cpp b/src/WorldGenerator.cpp
-index 2b9d7a6..5a08b1b 100644
+index 12e9044..2b564a2 100755
 --- a/src/WorldGenerator.cpp
 +++ b/src/WorldGenerator.cpp
-@@ -100,6 +100,7 @@ WorldGenerator::WorldGenerator()
-   plug_use_gazebo_obs_ = this->declare_parameter<bool>("use_gazebo_obs", false);
+@@ -101,6 +101,8 @@ void WorldGenerator::readPluginParams()
    plug_use_collision_ = this->declare_parameter<bool>("use_collision", false);
    plug_update_rate_ = this->declare_parameter<double>("update_rate", 100.0);
-+  actor_scale_ = this->declare_parameter<double>("actor_scale", 1.0);
    plug_robot_name_ = this->declare_parameter<std::string>("robot_name", std::string("robot"));
++  actor_scale_ = this->declare_parameter<double>("actor_scale", 1.0);
++  actor_z_offset_ = this->declare_parameter<double>("actor_z_offset", 0.0);
    RCLCPP_INFO(this->get_logger(), "Robot name: %s", plug_robot_name_.c_str());
    plug_global_frame_ = this->declare_parameter<std::string>("global_frame_to_publish", std::string("map"));
-@@ -496,7 +497,7 @@ void WorldGenerator::generateWorld()
+   plug_use_navgoal_to_start_ = this->declare_parameter<bool>("use_navgoal_to_start", false);
+@@ -420,6 +422,9 @@ bool WorldGenerator::processXML()
+   tinyxml2::XMLElement* pGoalTopic = doc.NewElement("navgoal_topic");
+   pGoalTopic->SetText(plug_navgoal_topic_.c_str());
+ 
++  tinyxml2::XMLElement* pActorZ = doc.NewElement("actor_z_offset");
++  pActorZ->SetText(actor_z_offset_);
++
+   tinyxml2::XMLElement* pIgnoreModels = doc.NewElement("ignore_models");
+   std::vector<tinyxml2::XMLElement*> pModels;
+   for (std::string st : plug_ignore_models_)
+@@ -440,6 +445,8 @@ bool WorldGenerator::processXML()
+   plugin->InsertAfterChild(pGazebo, pGlobalFrame);
+   plugin->InsertAfterChild(pGlobalFrame, pUseGoal);
+   plugin->InsertAfterChild(pUseGoal, pGoalTopic);
++  plugin->InsertAfterChild(pGoalTopic, pActorZ);
++  plugin->InsertAfterChild(pActorZ, pIgnoreModels);
+   plugin->InsertAfterChild(pGoalTopic, pIgnoreModels);
+   tinyxml2::XMLElement* ignore =
+       doc.FirstChildElement("sdf")->FirstChildElement("world")->FirstChildElement("plugin")->FirstChildElement(
+@@ -469,7 +476,7 @@ bool WorldGenerator::processXML()
      tinyxml2::XMLElement* pFilename = doc.NewElement("filename");
      pFilename->SetText(skin_filename[a.skin].c_str());
      tinyxml2::XMLElement* pScale = doc.NewElement("scale");
--    pScale->SetText(1.0);
+-    pScale->SetText(1.0f);
 +    pScale->SetText(actor_scale_);
  
      // Set no_active animation
      tinyxml2::XMLElement* pAnimation = doc.NewElement("animation");
-@@ -524,7 +525,7 @@ void WorldGenerator::generateWorld()
+@@ -497,7 +504,7 @@ bool WorldGenerator::processXML()
      }
  
      tinyxml2::XMLElement* pScale1 = doc.NewElement("scale");
--    pScale1->SetText(1.0);
+-    pScale1->SetText("1.0");
 +    pScale1->SetText(actor_scale_);
      tinyxml2::XMLElement* pInterpolate = doc.NewElement("interpolate_x");
      pInterpolate->SetText("true");
-@@ -560,7 +561,7 @@ void WorldGenerator::generateWorld()
+ 
+@@ -533,7 +540,7 @@ bool WorldGenerator::processXML()
      }
  
      tinyxml2::XMLElement* pScale2 = doc.NewElement("scale");
--    pScale2->SetText(1.0);
+-    pScale2->SetText("1.0");
 +    pScale2->SetText(actor_scale_);
      tinyxml2::XMLElement* pInterpolate1 = doc.NewElement("interpolate_x");
      pInterpolate1->SetText("true");
+ 

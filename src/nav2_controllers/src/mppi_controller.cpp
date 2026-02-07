@@ -41,12 +41,27 @@ double MPPIController::stageCost(
   const std::array<double, 3> & x,
   const std::array<double, 2> & u,
   const std::array<double, 2> & goal,
-  const nav2_costmap_2d::Costmap2D * costmap) const
+  const nav2_costmap_2d::Costmap2D * costmap,
+  const std::vector<std::array<double, 2>> * path_xy) const
 {
   // 1) расстояние до цели
   const double dx = x[0] - goal[0];
   const double dy = x[1] - goal[1];
   double cost = p_.w_goal * (dx * dx + dy * dy);
+
+  // 1.5) дистанция до глобального пути (если есть)
+  if (path_xy != nullptr && !path_xy->empty()) {
+    double best_d2 = std::numeric_limits<double>::infinity();
+    for (const auto & p : *path_xy) {
+      const double px = x[0] - p[0];
+      const double py = x[1] - p[1];
+      const double d2 = px * px + py * py;
+      if (d2 < best_d2) {
+        best_d2 = d2;
+      }
+    }
+    cost += p_.w_path * best_d2;
+  }
 
   // 2) штраф за управление
   cost += p_.w_ctrl * (u[0] * u[0] + u[1] * u[1]);
@@ -60,9 +75,9 @@ double MPPIController::stageCost(
 
       if (c == nav2_costmap_2d::LETHAL_OBSTACLE ||
           c == nav2_costmap_2d::INSCRIBED_INFLATED_OBSTACLE) {
-        obstacle_penalty = p_.w_obs * 8.0;
+        obstacle_penalty = p_.w_obs * 5.0;
       } else if (c == nav2_costmap_2d::NO_INFORMATION) {
-        obstacle_penalty = p_.w_obs * 4.0;
+        obstacle_penalty = p_.w_obs * 2.0;
       } else {
         const double norm = static_cast<double>(c) / 252.0;
         obstacle_penalty = p_.w_obs * norm * norm;
@@ -71,7 +86,7 @@ double MPPIController::stageCost(
       cost += obstacle_penalty;
     } else {
       // точка вне карты — тоже считаем плохо
-      cost += p_.w_obs * 8.0;
+      cost += p_.w_obs * 5.0;
     }
   }
 
@@ -84,7 +99,8 @@ double MPPIController::stageCost(
 std::array<double, 2> MPPIController::computeControl(
   const std::array<double, 3> & x0,
   const std::array<double, 2> & goal,
-  const nav2_costmap_2d::Costmap2D * costmap)
+  const nav2_costmap_2d::Costmap2D * costmap,
+  const std::vector<std::array<double, 2>> * path_xy)
 {
   const int K = p_.n_rollouts;
   const int T = p_.horizon_steps;
@@ -126,7 +142,7 @@ std::array<double, 2> MPPIController::computeControl(
       std::array<double, 2> u{v, w};
       x = dynamics(x, u);
 
-      total_cost += stageCost(x, u, goal, costmap);
+      total_cost += stageCost(x, u, goal, costmap, path_xy);
     }
 
     costs[k] = total_cost;

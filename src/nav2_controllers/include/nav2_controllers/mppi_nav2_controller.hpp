@@ -56,6 +56,8 @@ private:
 
   nav_msgs::msg::Path global_plan_;
 
+  MPPIParams params_;
+  double goal_lookahead_dist_{0.6};
   MPPIController mppi_;
 };
 
