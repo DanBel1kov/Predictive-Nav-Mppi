@@ -249,10 +249,38 @@ def generate_launch_description():
         }],
     )
 
+    people_kf_predictor = Node(
+        package='predictive_nav_mppi',
+        executable='people_kf_predictor',
+        name='people_kf_predictor',
+        output='screen',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'input_topic': '/people',
+            'output_cloud_topic': '/predicted_people_cloud',
+            'output_markers_topic': '/predicted_people_markers',
+            'publish_rate_hz': 10.0,
+            'pred_dt': 0.1,
+            'pred_steps': 50,
+            'sigma_meas': 0.08,
+            'sigma_acc': 0.6,
+            'sigma_p0': 0.2,
+            'sigma_v0': 0.8,
+            'min_dt': 0.02,
+            'max_dt': 0.3,
+            'track_timeout': 1.0,
+            'max_people': 100,
+            'publish_markers': True,
+            'publish_ellipses': True,
+            'ellipse_steps': 3,
+            'frame_id_override': '',
+        }],
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='True'),
         DeclareLaunchArgument('gui', default_value='True'),
-        DeclareLaunchArgument('map', default_value='/home/danbel1kov/predictive-nav-mppi/maps/room_map.yaml'),
+        DeclareLaunchArgument('map', default_value='/home/danbel1kov/predictive-nav-mppi/maps/small_room_map.yaml'),
         DeclareLaunchArgument('params_file', default_value='/home/danbel1kov/predictive-nav-mppi/src/predictive_nav_mppi/config/nav2_params_full.yaml'),
         DeclareLaunchArgument('rviz_config', default_value='/home/danbel1kov/predictive-nav-mppi/rviz/nav2_topdown.rviz'),
         DeclareLaunchArgument('publish_initial_pose', default_value='True'),
@@ -277,5 +305,6 @@ def generate_launch_description():
         nav2_delayed,
         rviz_delayed,
         hunav_delayed,
+        people_kf_predictor,
         initpose,
     ])

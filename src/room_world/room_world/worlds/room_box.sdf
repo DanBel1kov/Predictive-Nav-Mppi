@@ -17,51 +17,51 @@
     <!-- north/south walls -->
     <model name="wall_north">
       <static>true</static>
-      <pose>0 5 1 0 0 0</pose>
+      <pose>0 3 0.6 0 0 0</pose>
       <link name="link">
-        <collision name="collision"><geometry><box><size>10 0.2 2</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>10 0.2 2</size></box></geometry></visual>
+        <collision name="collision"><geometry><box><size>6 0.12 1.2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>6 0.12 1.2</size></box></geometry></visual>
       </link>
     </model>
 
     <model name="wall_south">
       <static>true</static>
-      <pose>0 -5 1 0 0 0</pose>
+      <pose>0 -3 0.6 0 0 0</pose>
       <link name="link">
-        <collision name="collision"><geometry><box><size>10 0.2 2</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>10 0.2 2</size></box></geometry></visual>
+        <collision name="collision"><geometry><box><size>6 0.12 1.2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>6 0.12 1.2</size></box></geometry></visual>
       </link>
     </model>
 
     <!-- east/west walls -->
     <model name="wall_east">
       <static>true</static>
-      <pose>5 0 1 0 0 0</pose>
+      <pose>3 0 0.6 0 0 0</pose>
       <link name="link">
-        <collision name="collision"><geometry><box><size>0.2 10 2</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>0.2 10 2</size></box></geometry></visual>
+        <collision name="collision"><geometry><box><size>0.12 6 1.2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.12 6 1.2</size></box></geometry></visual>
       </link>
     </model>
 
     <model name="wall_west">
       <static>true</static>
-      <pose>-5 0 1 0 0 0</pose>
+      <pose>-3 0 0.6 0 0 0</pose>
       <link name="link">
-        <collision name="collision"><geometry><box><size>0.2 10 2</size></box></geometry></collision>
-        <visual name="visual"><geometry><box><size>0.2 10 2</size></box></geometry></visual>
+        <collision name="collision"><geometry><box><size>0.12 6 1.2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.12 6 1.2</size></box></geometry></visual>
       </link>
     </model>
 
     <!-- optional obstacle -->
     <model name="pillar">
       <static>true</static>
-      <pose>1 1 0.5 0 0 0</pose>
+      <pose>0.6 0.6 0.3 0 0 0</pose>
       <link name="link">
         <collision name="collision">
-          <geometry><cylinder><radius>0.3</radius><length>1.0</length></cylinder></geometry>
+          <geometry><cylinder><radius>0.18</radius><length>0.6</length></cylinder></geometry>
         </collision>
         <visual name="visual">
-          <geometry><cylinder><radius>0.3</radius><length>1.0</length></cylinder></geometry>
+          <geometry><cylinder><radius>0.18</radius><length>0.6</length></cylinder></geometry>
         </visual>
       </link>
     </model>

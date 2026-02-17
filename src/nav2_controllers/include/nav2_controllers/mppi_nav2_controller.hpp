@@ -1,13 +1,19 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
+#include <array>
+#include <vector>
 
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
+#include "rclcpp/publisher.hpp"
+#include "rclcpp/subscription.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav_msgs/msg/path.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 #include "tf2_ros/buffer.h"
 #include "nav2_core/controller.hpp"
 #include "nav2_costmap_2d/costmap_2d_ros.hpp"
@@ -44,6 +50,8 @@ public:
 
 private:
   double yawFromQuat(const geometry_msgs::msg::Quaternion & q) const;
+  void publishRollouts(const std::vector<RolloutDebug> & rollouts, const rclcpp::Time & stamp);
+  void predictedPeopleCallback(const visualization_msgs::msg::MarkerArray::SharedPtr msg);
 
   rclcpp_lifecycle::LifecycleNode::WeakPtr node_;
   std::string name_;
@@ -59,6 +67,18 @@ private:
   MPPIParams params_;
   double goal_lookahead_dist_{0.6};
   MPPIController mppi_;
+
+  bool debug_rollouts_enabled_{false};
+  int debug_rollouts_top_n_{10};
+  double debug_rollouts_line_width_{0.02};
+  std::string debug_rollouts_topic_{"/mppi_debug_rollouts"};
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr rollouts_pub_;
+
+  bool dyn_people_enabled_{true};
+  std::string dyn_people_topic_{"/predicted_people_markers"};
+  std::vector<std::vector<std::array<double, 2>>> dyn_people_trajs_;
+  std::mutex dyn_people_mutex_;
+  rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr dyn_people_sub_;
 };
 
 }  // namespace my_nav2_controllers

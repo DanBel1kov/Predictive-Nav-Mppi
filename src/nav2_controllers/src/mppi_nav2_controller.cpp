@@ -1,14 +1,18 @@
 #include "nav2_controllers/mppi_nav2_controller.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "pluginlib/class_list_macros.hpp"
 #include "nav2_costmap_2d/costmap_2d.hpp"
 #include "nav2_util/node_utils.hpp"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
+#include "visualization_msgs/msg/marker.hpp"
 
 namespace nav2_controllers
 {
@@ -125,9 +129,33 @@ void MppiNav2Controller::configure(
   nav2_util::declare_parameter_if_not_declared(
     node, prefix + "w_path", rclcpp::ParameterValue(params_.w_path));
   nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "w_dyn_obs", rclcpp::ParameterValue(params_.w_dyn_obs));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "dyn_obs_sigma", rclcpp::ParameterValue(params_.dyn_obs_sigma));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "dyn_obs_cutoff", rclcpp::ParameterValue(params_.dyn_obs_cutoff));
+  nav2_util::declare_parameter_if_not_declared(
     node, prefix + "lambda", rclcpp::ParameterValue(params_.lambda));
   nav2_util::declare_parameter_if_not_declared(
     node, prefix + "goal_lookahead_dist", rclcpp::ParameterValue(goal_lookahead_dist_));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "debug_rollouts_enabled",
+    rclcpp::ParameterValue(debug_rollouts_enabled_));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "debug_rollouts_top_n",
+    rclcpp::ParameterValue(debug_rollouts_top_n_));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "debug_rollouts_line_width",
+    rclcpp::ParameterValue(debug_rollouts_line_width_));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "debug_rollouts_topic",
+    rclcpp::ParameterValue(debug_rollouts_topic_));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "dyn_people_enabled",
+    rclcpp::ParameterValue(dyn_people_enabled_));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "dyn_people_topic",
+    rclcpp::ParameterValue(dyn_people_topic_));
 
   node->get_parameter(prefix + "dt", params_.dt);
   node->get_parameter(prefix + "horizon_steps", params_.horizon_steps);
@@ -145,17 +173,40 @@ void MppiNav2Controller::configure(
   node->get_parameter(prefix + "w_ctrl", params_.w_ctrl);
   node->get_parameter(prefix + "w_speed", params_.w_speed);
   node->get_parameter(prefix + "w_path", params_.w_path);
+  node->get_parameter(prefix + "w_dyn_obs", params_.w_dyn_obs);
+  node->get_parameter(prefix + "dyn_obs_sigma", params_.dyn_obs_sigma);
+  node->get_parameter(prefix + "dyn_obs_cutoff", params_.dyn_obs_cutoff);
   node->get_parameter(prefix + "lambda", params_.lambda);
   node->get_parameter(prefix + "goal_lookahead_dist", goal_lookahead_dist_);
+  node->get_parameter(prefix + "debug_rollouts_enabled", debug_rollouts_enabled_);
+  node->get_parameter(prefix + "debug_rollouts_top_n", debug_rollouts_top_n_);
+  node->get_parameter(prefix + "debug_rollouts_line_width", debug_rollouts_line_width_);
+  node->get_parameter(prefix + "debug_rollouts_topic", debug_rollouts_topic_);
+  node->get_parameter(prefix + "dyn_people_enabled", dyn_people_enabled_);
+  node->get_parameter(prefix + "dyn_people_topic", dyn_people_topic_);
 
   mppi_ = MPPIController(params_);
+
+  if (debug_rollouts_enabled_) {
+    rollouts_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>(
+      debug_rollouts_topic_, rclcpp::QoS(10));
+  }
+  if (dyn_people_enabled_) {
+    dyn_people_sub_ = node->create_subscription<visualization_msgs::msg::MarkerArray>(
+      dyn_people_topic_, rclcpp::QoS(10),
+      std::bind(&MppiNav2Controller::predictedPeopleCallback, this, std::placeholders::_1));
+  }
 }
 
 void MppiNav2Controller::cleanup()
 {
+  rollouts_pub_.reset();
+  dyn_people_sub_.reset();
   costmap_ros_.reset();
   tf_.reset();
   costmap_ = nullptr;
+  std::lock_guard<std::mutex> lock(dyn_people_mutex_);
+  dyn_people_trajs_.clear();
 }
 
 void MppiNav2Controller::activate()
@@ -226,14 +277,114 @@ geometry_msgs::msg::TwistStamped MppiNav2Controller::computeVelocityCommands(
   }
 
   const nav2_costmap_2d::Costmap2D * cm = costmap_;
-  auto u = mppi_.computeControl(x0, goal_xy, cm, &path_xy);
+  std::vector<RolloutDebug> rollout_debug;
+  auto * rollout_ptr = debug_rollouts_enabled_ ? &rollout_debug : nullptr;
+  std::vector<std::vector<std::array<double, 2>>> dyn_people_snapshot;
+  if (dyn_people_enabled_) {
+    std::lock_guard<std::mutex> lock(dyn_people_mutex_);
+    dyn_people_snapshot = dyn_people_trajs_;
+  }
+  auto * dyn_ptr = dyn_people_enabled_ ? &dyn_people_snapshot : nullptr;
+  auto u = mppi_.computeControl(x0, goal_xy, cm, &path_xy, dyn_ptr, rollout_ptr);
 
   cmd.twist.linear.x = static_cast<float>(u[0]);
   cmd.twist.angular.z = static_cast<float>(u[1]);
   cmd.header.stamp = node_.lock()->now();
   cmd.header.frame_id = robot_base_frame_;   // base_link
 
+  if (debug_rollouts_enabled_) {
+    publishRollouts(rollout_debug, cmd.header.stamp);
+  }
+
   return cmd;
+}
+
+void MppiNav2Controller::publishRollouts(
+  const std::vector<RolloutDebug> & rollouts,
+  const rclcpp::Time & stamp)
+{
+  if (!rollouts_pub_) {
+    return;
+  }
+
+  visualization_msgs::msg::MarkerArray msg;
+  visualization_msgs::msg::Marker clear;
+  clear.header.stamp = stamp;
+  clear.header.frame_id = global_frame_;
+  clear.action = visualization_msgs::msg::Marker::DELETEALL;
+  msg.markers.push_back(clear);
+
+  if (rollouts.empty()) {
+    rollouts_pub_->publish(msg);
+    return;
+  }
+
+  std::vector<size_t> ids(rollouts.size());
+  for (size_t i = 0; i < ids.size(); ++i) {
+    ids[i] = i;
+  }
+  std::sort(ids.begin(), ids.end(), [&rollouts](size_t a, size_t b) {
+    return rollouts[a].cost < rollouts[b].cost;
+  });
+
+  const int keep_n = std::max(0, std::min(debug_rollouts_top_n_, static_cast<int>(ids.size())));
+  for (int rank = 0; rank < keep_n; ++rank) {
+    const auto & r = rollouts[ids[rank]];
+    visualization_msgs::msg::Marker m;
+    m.header.stamp = stamp;
+    m.header.frame_id = global_frame_;
+    m.ns = "mppi_rollouts";
+    m.id = rank;
+    m.type = visualization_msgs::msg::Marker::LINE_STRIP;
+    m.action = visualization_msgs::msg::Marker::ADD;
+    m.pose.orientation.w = 1.0;
+    m.scale.x = std::max(0.001, debug_rollouts_line_width_);
+    m.lifetime = rclcpp::Duration::from_seconds(0.2);
+
+    const double t = (keep_n > 1) ? static_cast<double>(rank) / static_cast<double>(keep_n - 1) : 0.0;
+    m.color.r = static_cast<float>(0.1 + 0.9 * t);
+    m.color.g = static_cast<float>(0.9 - 0.7 * t);
+    m.color.b = 0.2f;
+    m.color.a = 0.95f;
+
+    m.points.reserve(r.states.size());
+    for (const auto & x : r.states) {
+      geometry_msgs::msg::Point p;
+      p.x = x[0];
+      p.y = x[1];
+      p.z = 0.03;
+      m.points.push_back(p);
+    }
+    msg.markers.push_back(m);
+  }
+
+  rollouts_pub_->publish(msg);
+}
+
+void MppiNav2Controller::predictedPeopleCallback(
+  const visualization_msgs::msg::MarkerArray::SharedPtr msg)
+{
+  std::vector<std::vector<std::array<double, 2>>> parsed;
+  parsed.reserve(msg->markers.size());
+  for (const auto & m : msg->markers) {
+    if (m.ns != "predicted_people_path" ||
+      m.type != visualization_msgs::msg::Marker::LINE_STRIP ||
+      m.action != visualization_msgs::msg::Marker::ADD)
+    {
+      continue;
+    }
+    if (m.points.empty()) {
+      continue;
+    }
+    std::vector<std::array<double, 2>> traj;
+    traj.reserve(m.points.size());
+    for (const auto & p : m.points) {
+      traj.push_back({p.x, p.y});
+    }
+    parsed.push_back(std::move(traj));
+  }
+  std::lock_guard<std::mutex> lock(dyn_people_mutex_);
+  dyn_people_trajs_ = std::move(parsed);
 }
 
 void MppiNav2Controller::setSpeedLimit(const double & speed_limit, const bool & percentage)

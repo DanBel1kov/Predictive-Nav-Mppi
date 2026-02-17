@@ -134,12 +134,12 @@ controller_server:
     FollowPath:
       plugin: "nav2_controllers::MppiNav2Controller"
       dt: 0.1
-      horizon_steps: 30
+      horizon_steps: 45
       n_rollouts: 200
       v_mean: 0.2
       omega_mean: 0.0
-      v_std: 0.06
-      omega_std: 0.30
+      v_std: 0.08
+      omega_std: 0.45
       v_min: -0.1
       v_max: 0.25
       omega_min: -1.5
@@ -149,8 +149,17 @@ controller_server:
       w_ctrl: 0.3
       w_speed: 0.2
       w_path: 2.0
-      lambda: 1.0
+      w_dyn_obs: 20.0
+      dyn_obs_sigma: 0.35
+      dyn_obs_cutoff: 1.2
+      lambda: 1.5
       goal_lookahead_dist: 0.6
+      debug_rollouts_enabled: True
+      debug_rollouts_top_n: 20
+      debug_rollouts_line_width: 0.02
+      debug_rollouts_topic: /mppi_debug_rollouts
+      dyn_people_enabled: True
+      dyn_people_topic: /predicted_people_markers
 
 local_costmap:
   local_costmap:

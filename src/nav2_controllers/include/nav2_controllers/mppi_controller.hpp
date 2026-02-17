@@ -31,8 +31,17 @@ struct MPPIParams
   double w_ctrl = 0.3;
   double w_speed = 0.1;
   double w_path = 1.0;
+  double w_dyn_obs = 20.0;
+  double dyn_obs_sigma = 0.35;
+  double dyn_obs_cutoff = 1.2;
 
   double lambda = 1.0;
+};
+
+struct RolloutDebug
+{
+  std::vector<std::array<double, 3>> states;
+  double cost{0.0};
 };
 
 class MPPIController
@@ -47,7 +56,9 @@ public:
     const std::array<double, 3> & x0,
     const std::array<double, 2> & goal,
     const nav2_costmap_2d::Costmap2D * costmap,
-    const std::vector<std::array<double, 2>> * path_xy = nullptr);
+    const std::vector<std::array<double, 2>> * path_xy = nullptr,
+    const std::vector<std::vector<std::array<double, 2>>> * dyn_predictions = nullptr,
+    std::vector<RolloutDebug> * rollout_debug = nullptr);
 
 private:
   std::array<double, 3> dynamics(
@@ -56,10 +67,12 @@ private:
 
   double stageCost(
     const std::array<double, 3> & x,
+    int step_idx,
     const std::array<double, 2> & u,
     const std::array<double, 2> & goal,
     const nav2_costmap_2d::Costmap2D * costmap,
-    const std::vector<std::array<double, 2>> * path_xy) const;
+    const std::vector<std::array<double, 2>> * path_xy,
+    const std::vector<std::vector<std::array<double, 2>>> * dyn_predictions) const;
 
   MPPIParams p_;
   std::vector<double> u_seq_;

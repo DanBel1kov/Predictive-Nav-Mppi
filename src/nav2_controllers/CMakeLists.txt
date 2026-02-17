@@ -12,6 +12,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 find_package(nav2_util REQUIRED)
 
 include_directories(include)
@@ -31,6 +32,7 @@ ament_target_dependencies(mppi_nav2_controller
   geometry_msgs
   nav_msgs
   sensor_msgs
+  visualization_msgs
   pluginlib
   nav2_util
 )
@@ -70,6 +72,7 @@ ament_export_dependencies(
   geometry_msgs
   nav_msgs
   sensor_msgs
+  visualization_msgs
   pluginlib
   nav2_util
 )

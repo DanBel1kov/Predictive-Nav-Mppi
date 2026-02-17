@@ -4,6 +4,7 @@
 #include <cmath>
 #include <limits>
 #include <random>
+#include <utility>
 
 #include "nav2_costmap_2d/costmap_2d.hpp"
 #include "nav2_costmap_2d/cost_values.hpp"
@@ -39,10 +40,12 @@ std::array<double, 3> MPPIController::dynamics(
 
 double MPPIController::stageCost(
   const std::array<double, 3> & x,
+  int step_idx,
   const std::array<double, 2> & u,
   const std::array<double, 2> & goal,
   const nav2_costmap_2d::Costmap2D * costmap,
-  const std::vector<std::array<double, 2>> * path_xy) const
+  const std::vector<std::array<double, 2>> * path_xy,
+  const std::vector<std::vector<std::array<double, 2>>> * dyn_predictions) const
 {
   // 1) расстояние до цели
   const double dx = x[0] - goal[0];
@@ -90,6 +93,26 @@ double MPPIController::stageCost(
     }
   }
 
+  // 3.5) динамические препятствия с привязкой ко времени шага t
+  if (dyn_predictions != nullptr && p_.w_dyn_obs > 0.0) {
+    const double sigma = std::max(1e-3, p_.dyn_obs_sigma);
+    const double inv_2sigma2 = 0.5 / (sigma * sigma);
+    const double cutoff2 = p_.dyn_obs_cutoff * p_.dyn_obs_cutoff;
+    for (const auto & traj : *dyn_predictions) {
+      if (step_idx < 0 || static_cast<size_t>(step_idx) >= traj.size()) {
+        continue;
+      }
+      const auto & p = traj[static_cast<size_t>(step_idx)];
+      const double dx = x[0] - p[0];
+      const double dy = x[1] - p[1];
+      const double d2 = dx * dx + dy * dy;
+      if (d2 > cutoff2) {
+        continue;
+      }
+      cost += p_.w_dyn_obs * std::exp(-d2 * inv_2sigma2);
+    }
+  }
+
   // 4) награда за движение вперёд
   cost -= p_.w_speed * u[0] * p_.dt;
 
@@ -100,7 +123,9 @@ std::array<double, 2> MPPIController::computeControl(
   const std::array<double, 3> & x0,
   const std::array<double, 2> & goal,
   const nav2_costmap_2d::Costmap2D * costmap,
-  const std::vector<std::array<double, 2>> * path_xy)
+  const std::vector<std::array<double, 2>> * path_xy,
+  const std::vector<std::vector<std::array<double, 2>>> * dyn_predictions,
+  std::vector<RolloutDebug> * rollout_debug)
 {
   const int K = p_.n_rollouts;
   const int T = p_.horizon_steps;
@@ -109,6 +134,10 @@ std::array<double, 2> MPPIController::computeControl(
   // шум (K * T * 2)
   std::vector<double> noise(K * T * 2, 0.0);
   std::vector<double> costs(K, 0.0);
+  if (rollout_debug != nullptr) {
+    rollout_debug->clear();
+    rollout_debug->reserve(K);
+  }
 
   static thread_local std::mt19937 gen{std::random_device{}()};
   std::normal_distribution<double> dist(0.0, 1.0);
@@ -128,6 +157,11 @@ std::array<double, 2> MPPIController::computeControl(
   for (int k = 0; k < K; ++k) {
     std::array<double, 3> x = x0;
     double total_cost = 0.0;
+    RolloutDebug dbg;
+    if (rollout_debug != nullptr) {
+      dbg.states.reserve(static_cast<size_t>(T) + 1U);
+      dbg.states.push_back(x0);
+    }
 
     for (int t = 0; t < T; ++t) {
       const int idx = (k * T + t) * 2;
@@ -141,11 +175,18 @@ std::array<double, 2> MPPIController::computeControl(
 
       std::array<double, 2> u{v, w};
       x = dynamics(x, u);
+      if (rollout_debug != nullptr) {
+        dbg.states.push_back(x);
+      }
 
-      total_cost += stageCost(x, u, goal, costmap, path_xy);
+      total_cost += stageCost(x, t, u, goal, costmap, path_xy, dyn_predictions);
     }
 
     costs[k] = total_cost;
+    if (rollout_debug != nullptr) {
+      dbg.cost = total_cost;
+      rollout_debug->push_back(std::move(dbg));
+    }
   }
 
   // нормировка стоимостей

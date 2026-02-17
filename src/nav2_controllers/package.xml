@@ -15,6 +15,7 @@
   <depend>pluginlib</depend>
   <depend>tf2_ros</depend>
   <depend>nav_msgs</depend>
+  <depend>visualization_msgs</depend>
 
   <maintainer email="you@example.com">you</maintainer>
   <license>Apache-2.0</license>

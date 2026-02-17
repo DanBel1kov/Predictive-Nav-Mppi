@@ -20,6 +20,7 @@ setup(
     entry_points={
         'console_scripts': [
             'publish_initial_pose = predictive_nav_mppi.publish_initial_pose:main',
+            'people_kf_predictor = predictive_nav_mppi.people_kf_predictor:main',
         ],
     },
 )
