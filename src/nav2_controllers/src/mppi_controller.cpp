@@ -45,7 +45,7 @@ double MPPIController::stageCost(
   const std::array<double, 2> & goal,
   const nav2_costmap_2d::Costmap2D * costmap,
   const std::vector<std::array<double, 2>> * path_xy,
-  const std::vector<std::vector<std::array<double, 2>>> * dyn_predictions) const
+  const std::vector<std::vector<DynPredictionStep>> * dyn_predictions) const
 {
   // 1) расстояние до цели
   const double dx = x[0] - goal[0];
@@ -93,23 +93,44 @@ double MPPIController::stageCost(
     }
   }
 
-  // 3.5) динамические препятствия с привязкой ко времени шага t
+  // 3.5) chance-constrained risk для динамических препятствий на шаге t
   if (dyn_predictions != nullptr && p_.w_dyn_obs > 0.0) {
-    const double sigma = std::max(1e-3, p_.dyn_obs_sigma);
-    const double inv_2sigma2 = 0.5 / (sigma * sigma);
-    const double cutoff2 = p_.dyn_obs_cutoff * p_.dyn_obs_cutoff;
+    const double delta = std::max(1e-6, std::min(0.49, p_.dyn_risk_delta));
+    const double c = -2.0 * std::log(delta);  // chi-square quantile for dof=2
+    const double beta = std::max(1e-3, p_.dyn_risk_beta);
+    const double robot_var = std::max(0.0, p_.dyn_robot_var);
     for (const auto & traj : *dyn_predictions) {
       if (step_idx < 0 || static_cast<size_t>(step_idx) >= traj.size()) {
         continue;
       }
-      const auto & p = traj[static_cast<size_t>(step_idx)];
-      const double dx = x[0] - p[0];
-      const double dy = x[1] - p[1];
-      const double d2 = dx * dx + dy * dy;
-      if (d2 > cutoff2) {
+      const auto & pred = traj[static_cast<size_t>(step_idx)];
+      const double dx = x[0] - pred.mu[0];
+      const double dy = x[1] - pred.mu[1];
+
+      if (!pred.has_sigma) {
         continue;
       }
-      cost += p_.w_dyn_obs * std::exp(-d2 * inv_2sigma2);
+
+      const double s00 = pred.sigma[0] + robot_var;
+      const double s01 = pred.sigma[1];
+      const double s10 = pred.sigma[2];
+      const double s11 = pred.sigma[3] + robot_var;
+      const double det = s00 * s11 - s01 * s10;
+      if (det < 1e-12) {
+        continue;
+      }
+
+      const double inv00 = s11 / det;
+      const double inv01 = -s01 / det;
+      const double inv10 = -s10 / det;
+      const double inv11 = s00 / det;
+      const double d2 = dx * (inv00 * dx + inv01 * dy) + dy * (inv10 * dx + inv11 * dy);
+
+      const double margin = c - d2;
+      const double softplus = (margin > 30.0 / beta) ?
+        margin :
+        std::log1p(std::exp(beta * margin)) / beta;
+      cost += p_.w_dyn_obs * softplus;
     }
   }
 
@@ -124,7 +145,7 @@ std::array<double, 2> MPPIController::computeControl(
   const std::array<double, 2> & goal,
   const nav2_costmap_2d::Costmap2D * costmap,
   const std::vector<std::array<double, 2>> * path_xy,
-  const std::vector<std::vector<std::array<double, 2>>> * dyn_predictions,
+  const std::vector<std::vector<DynPredictionStep>> * dyn_predictions,
   std::vector<RolloutDebug> * rollout_debug)
 {
   const int K = p_.n_rollouts;

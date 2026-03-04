@@ -76,7 +76,10 @@ private:
 
   bool dyn_people_enabled_{true};
   std::string dyn_people_topic_{"/predicted_people_markers"};
-  std::vector<std::vector<std::array<double, 2>>> dyn_people_trajs_;
+  double dyn_people_cov_n_sigma_{2.0};
+  double dyn_people_default_std_{0.35};
+  double dyn_people_cov_std_cap_{0.8};
+  std::vector<std::vector<DynPredictionStep>> dyn_people_trajs_;
   std::mutex dyn_people_mutex_;
   rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr dyn_people_sub_;
 };

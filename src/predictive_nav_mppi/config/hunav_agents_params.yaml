@@ -39,7 +39,7 @@ hunav_loader:
         goal_force_factor: 4.0
         obstacle_force_factor: 3.0
         social_force_factor: 1.0
-        other_force_factor: 5.0
+        other_force_factor: 0.5
       goals:
         - 1
         - 2
@@ -62,7 +62,7 @@ hunav_loader:
         goal_force_factor: 4.0
         obstacle_force_factor: 3.0
         social_force_factor: 1.0
-        other_force_factor: 5.0
+        other_force_factor: 0.5
       goals:
         - 3
         - 4

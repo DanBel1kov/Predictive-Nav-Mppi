@@ -21,6 +21,7 @@
   <depend>visualization_msgs</depend>
   <depend>builtin_interfaces</depend>
   <depend>people_msgs</depend>
+  <depend>hunav_msgs</depend>
 
   <exec_depend>gazebo_ros</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>

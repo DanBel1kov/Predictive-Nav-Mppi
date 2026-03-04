@@ -1,0 +1,129 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="long_corridor">
+    <physics type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+
+    <include><uri>model://ground_plane</uri></include>
+    <include><uri>model://sun</uri></include>
+
+    <scene>
+      <shadows>false</shadows>
+    </scene>
+
+    <!-- Outer boundary: 30m x 10m -->
+    <model name="outer_north">
+      <static>true</static>
+      <pose>0 5 0.6 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>30 0.2 1.2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>30 0.2 1.2</size></box></geometry></visual>
+      </link>
+    </model>
+
+    <model name="outer_south">
+      <static>true</static>
+      <pose>0 -5 0.6 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>30 0.2 1.2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>30 0.2 1.2</size></box></geometry></visual>
+      </link>
+    </model>
+
+    <model name="outer_east">
+      <static>true</static>
+      <pose>15 0 0.6 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.2 10 1.2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.2 10 1.2</size></box></geometry></visual>
+      </link>
+    </model>
+
+    <model name="outer_west">
+      <static>true</static>
+      <pose>-15 0 0.6 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.2 10 1.2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>0.2 10 1.2</size></box></geometry></visual>
+      </link>
+    </model>
+
+    <!-- Corridor side walls (gap sections at x=-4 and x=2 for trajectory intersections).
+         Central corridor slightly wider than original: inner walls at |y|=1.8 (about +50% vs 1.2). -->
+    <model name="corridor_top_left">
+      <static>true</static>
+      <pose>-9.0 1.8 0.6 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>10.0 0.2 1.2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>10.0 0.2 1.2</size></box></geometry></visual>
+      </link>
+    </model>
+
+    <model name="corridor_top_mid">
+      <static>true</static>
+      <pose>-1.0 1.8 0.6 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>4.0 0.2 1.2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>4.0 0.2 1.2</size></box></geometry></visual>
+      </link>
+    </model>
+
+    <model name="corridor_top_right">
+      <static>true</static>
+      <pose>6.0 1.8 0.6 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>8.0 0.2 1.2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>8.0 0.2 1.2</size></box></geometry></visual>
+      </link>
+    </model>
+
+    <model name="corridor_bottom_left">
+      <static>true</static>
+      <pose>-9.0 -1.8 0.6 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>10.0 0.2 1.2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>10.0 0.2 1.2</size></box></geometry></visual>
+      </link>
+    </model>
+
+    <model name="corridor_bottom_mid">
+      <static>true</static>
+      <pose>-1.0 -1.8 0.6 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>4.0 0.2 1.2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>4.0 0.2 1.2</size></box></geometry></visual>
+      </link>
+    </model>
+
+    <model name="corridor_bottom_right">
+      <static>true</static>
+      <pose>6.0 -1.8 0.6 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>8.0 0.2 1.2</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>8.0 0.2 1.2</size></box></geometry></visual>
+      </link>
+    </model>
+
+    <!-- A couple of thin obstacles in side zones -->
+    <model name="bench_top">
+      <static>true</static>
+      <pose>9.5 3.2 0.2 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>1.4 0.4 0.4</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>1.4 0.4 0.4</size></box></geometry></visual>
+      </link>
+    </model>
+
+    <model name="bench_bottom">
+      <static>true</static>
+      <pose>-10.0 -3.2 0.2 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>1.4 0.4 0.4</size></box></geometry></collision>
+        <visual name="visual"><geometry><box><size>1.4 0.4 0.4</size></box></geometry></visual>
+      </link>
+    </model>
+  </world>
+</sdf>

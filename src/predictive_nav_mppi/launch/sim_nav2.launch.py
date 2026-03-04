@@ -4,7 +4,7 @@ import time
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription,
-    SetEnvironmentVariable, TimerAction, OpaqueFunction
+    SetEnvironmentVariable, TimerAction, OpaqueFunction, SetLaunchConfiguration, LogInfo
 )
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -100,8 +100,78 @@ def _prepare_hunav_world(context, *args, **kwargs):
     )]
 
 
+def _resolve_scenario_assets(context, *args, **kwargs):
+    scenario = LaunchConfiguration('scenario').perform(context).strip().lower()
+    world_override = LaunchConfiguration('world').perform(context).strip()
+    map_override = LaunchConfiguration('map').perform(context).strip()
+    hunav_override = LaunchConfiguration('hunav_params_file').perform(context).strip()
+    params_override = LaunchConfiguration('params_file').perform(context).strip()
+    mppi_mode = LaunchConfiguration('mppi_mode').perform(context).strip().lower()
+
+    if get_package_share_directory is None:
+        return []
+
+    room_world_share = get_package_share_directory('room_world')
+    self_share = get_package_share_directory('predictive_nav_mppi')
+
+    # Works for this workspace layout:
+    # <repo_root>/src/predictive_nav_mppi/launch/sim_nav2.launch.py
+    # and gracefully falls back to legacy absolute defaults.
+    repo_root_guess = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+    maps_dir_guess = os.path.join(repo_root_guess, 'maps')
+    if os.path.isdir(maps_dir_guess):
+        maps_dir = maps_dir_guess
+    else:
+        maps_dir = '/home/danbel1kov/predictive-nav-mppi/maps'
+
+    scenarios = {
+        'room_box': {
+            'world': os.path.join(room_world_share, 'worlds', 'room_box.sdf'),
+            'map': os.path.join(maps_dir, 'small_room_map.yaml'),
+            'hunav_params_file': os.path.join(self_share, 'config', 'hunav_agents_params.yaml'),
+        },
+        'long_corridor': {
+            'world': os.path.join(room_world_share, 'worlds', 'long_corridor.sdf'),
+            'map': os.path.join(maps_dir, 'long_corridor_map.yaml'),
+            'hunav_params_file': os.path.join(self_share, 'config', 'hunav_agents_corridor_params.yaml'),
+        },
+    }
+
+    if scenario not in scenarios:
+        scenario = 'room_box'
+    if mppi_mode not in ('custom', 'standard'):
+        mppi_mode = 'custom'
+
+    selected = scenarios[scenario]
+    default_nav2_params = os.path.join(self_share, 'config', 'nav2_params_full.yaml')
+    standard_nav2_params = os.path.join(
+        self_share, 'config', 'nav2_params_full_standard_mppi.yaml')
+    final_world = world_override if world_override else selected['world']
+    final_map = map_override if map_override else selected['map']
+    final_hunav = hunav_override if hunav_override else selected['hunav_params_file']
+    if params_override:
+        final_params = params_override
+    else:
+        final_params = (
+            standard_nav2_params if mppi_mode == 'standard' else default_nav2_params)
+
+    return [
+        SetLaunchConfiguration('world', final_world),
+        SetLaunchConfiguration('map', final_map),
+        SetLaunchConfiguration('hunav_params_file', final_hunav),
+        SetLaunchConfiguration('params_file', final_params),
+        LogInfo(msg=['Scenario: ', scenario]),
+        LogInfo(msg=['MPPI mode: ', mppi_mode]),
+        LogInfo(msg=['World: ', final_world]),
+        LogInfo(msg=['Map: ', final_map]),
+        LogInfo(msg=['Nav2 params: ', final_params]),
+        LogInfo(msg=['HuNav params: ', final_hunav]),
+    ]
+
+
 def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
+    world = LaunchConfiguration('world')
     map_yaml = LaunchConfiguration('map')
     params_file = LaunchConfiguration('params_file')
     rviz_config = LaunchConfiguration('rviz_config')
@@ -110,11 +180,8 @@ def generate_launch_description():
     initial_pose_yaw = LaunchConfiguration('initial_pose_yaw')
 
 
-    pkg_room = FindPackageShare('room_world')
     pkg_nav2 = FindPackageShare('nav2_bringup')
     pkg_self = FindPackageShare('predictive_nav_mppi')
-
-    world = PathJoinSubstitution([pkg_room, 'worlds', 'room_box.sdf'])
 
     env = [
         SetEnvironmentVariable('GAZEBO_MODEL_DATABASE_URI', ''),
@@ -229,6 +296,7 @@ def generate_launch_description():
             'use_sim_time': use_sim_time,
             'hunav_params_file': LaunchConfiguration('hunav_params_file'),
             'base_world': world,
+            'humans_ignore_robot': LaunchConfiguration('humans_ignore_robot'),
         }.items(),
     )
 
@@ -263,7 +331,7 @@ def generate_launch_description():
             'pred_dt': 0.1,
             'pred_steps': 50,
             'sigma_meas': 0.08,
-            'sigma_acc': 0.6,
+            'sigma_acc': 0.25,
             'sigma_p0': 0.2,
             'sigma_v0': 0.8,
             'min_dt': 0.02,
@@ -272,7 +340,7 @@ def generate_launch_description():
             'max_people': 100,
             'publish_markers': True,
             'publish_ellipses': True,
-            'ellipse_steps': 3,
+            'ellipse_steps': 12,
             'frame_id_override': '',
         }],
     )
@@ -280,18 +348,21 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='True'),
         DeclareLaunchArgument('gui', default_value='True'),
-        DeclareLaunchArgument('map', default_value='/home/danbel1kov/predictive-nav-mppi/maps/small_room_map.yaml'),
-        DeclareLaunchArgument('params_file', default_value='/home/danbel1kov/predictive-nav-mppi/src/predictive_nav_mppi/config/nav2_params_full.yaml'),
+        DeclareLaunchArgument('scenario', default_value='room_box'),
+        DeclareLaunchArgument('mppi_mode', default_value='custom'),
+        DeclareLaunchArgument('world', default_value=''),
+        DeclareLaunchArgument('map', default_value=''),
+        DeclareLaunchArgument('params_file', default_value=''),
         DeclareLaunchArgument('rviz_config', default_value='/home/danbel1kov/predictive-nav-mppi/rviz/nav2_topdown.rviz'),
         DeclareLaunchArgument('publish_initial_pose', default_value='True'),
         DeclareLaunchArgument('initial_pose_x', default_value='0.0'),
         DeclareLaunchArgument('initial_pose_y', default_value='0.0'),
         DeclareLaunchArgument('initial_pose_yaw', default_value='0.0'),
         DeclareLaunchArgument('use_hunav', default_value='True'),
-        DeclareLaunchArgument(
-            'hunav_params_file',
-            default_value=PathJoinSubstitution([pkg_self, 'config', 'hunav_agents_params.yaml']),
-        ),
+        DeclareLaunchArgument('hunav_params_file', default_value=''),
+        DeclareLaunchArgument('humans_ignore_robot', default_value='True'),
+
+        OpaqueFunction(function=_resolve_scenario_assets),
 
         *env,
         gzserver,

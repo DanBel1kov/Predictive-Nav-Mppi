@@ -32,10 +32,18 @@ struct MPPIParams
   double w_speed = 0.1;
   double w_path = 1.0;
   double w_dyn_obs = 20.0;
-  double dyn_obs_sigma = 0.35;
-  double dyn_obs_cutoff = 1.2;
+  double dyn_risk_delta = 0.05;
+  double dyn_risk_beta = 1.0;
+  double dyn_robot_var = 0.0;
 
   double lambda = 1.0;
+};
+
+struct DynPredictionStep
+{
+  std::array<double, 2> mu{0.0, 0.0};
+  std::array<double, 4> sigma{0.0, 0.0, 0.0, 0.0};  // row-major 2x2
+  bool has_sigma{false};
 };
 
 struct RolloutDebug
@@ -57,7 +65,7 @@ public:
     const std::array<double, 2> & goal,
     const nav2_costmap_2d::Costmap2D * costmap,
     const std::vector<std::array<double, 2>> * path_xy = nullptr,
-    const std::vector<std::vector<std::array<double, 2>>> * dyn_predictions = nullptr,
+    const std::vector<std::vector<DynPredictionStep>> * dyn_predictions = nullptr,
     std::vector<RolloutDebug> * rollout_debug = nullptr);
 
 private:
@@ -72,7 +80,7 @@ private:
     const std::array<double, 2> & goal,
     const nav2_costmap_2d::Costmap2D * costmap,
     const std::vector<std::array<double, 2>> * path_xy,
-    const std::vector<std::vector<std::array<double, 2>>> * dyn_predictions) const;
+    const std::vector<std::vector<DynPredictionStep>> * dyn_predictions) const;
 
   MPPIParams p_;
   std::vector<double> u_seq_;

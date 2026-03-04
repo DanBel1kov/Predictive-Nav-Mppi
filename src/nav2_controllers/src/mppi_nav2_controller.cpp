@@ -5,6 +5,7 @@
 #include <functional>
 #include <limits>
 #include <stdexcept>
+#include <unordered_map>
 #include <utility>
 
 #include "geometry_msgs/msg/transform_stamped.hpp"
@@ -131,9 +132,11 @@ void MppiNav2Controller::configure(
   nav2_util::declare_parameter_if_not_declared(
     node, prefix + "w_dyn_obs", rclcpp::ParameterValue(params_.w_dyn_obs));
   nav2_util::declare_parameter_if_not_declared(
-    node, prefix + "dyn_obs_sigma", rclcpp::ParameterValue(params_.dyn_obs_sigma));
+    node, prefix + "dyn_risk_delta", rclcpp::ParameterValue(params_.dyn_risk_delta));
   nav2_util::declare_parameter_if_not_declared(
-    node, prefix + "dyn_obs_cutoff", rclcpp::ParameterValue(params_.dyn_obs_cutoff));
+    node, prefix + "dyn_risk_beta", rclcpp::ParameterValue(params_.dyn_risk_beta));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "dyn_robot_var", rclcpp::ParameterValue(params_.dyn_robot_var));
   nav2_util::declare_parameter_if_not_declared(
     node, prefix + "lambda", rclcpp::ParameterValue(params_.lambda));
   nav2_util::declare_parameter_if_not_declared(
@@ -156,6 +159,15 @@ void MppiNav2Controller::configure(
   nav2_util::declare_parameter_if_not_declared(
     node, prefix + "dyn_people_topic",
     rclcpp::ParameterValue(dyn_people_topic_));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "dyn_people_cov_n_sigma",
+    rclcpp::ParameterValue(dyn_people_cov_n_sigma_));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "dyn_people_default_std",
+    rclcpp::ParameterValue(dyn_people_default_std_));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "dyn_people_cov_std_cap",
+    rclcpp::ParameterValue(dyn_people_cov_std_cap_));
 
   node->get_parameter(prefix + "dt", params_.dt);
   node->get_parameter(prefix + "horizon_steps", params_.horizon_steps);
@@ -174,8 +186,9 @@ void MppiNav2Controller::configure(
   node->get_parameter(prefix + "w_speed", params_.w_speed);
   node->get_parameter(prefix + "w_path", params_.w_path);
   node->get_parameter(prefix + "w_dyn_obs", params_.w_dyn_obs);
-  node->get_parameter(prefix + "dyn_obs_sigma", params_.dyn_obs_sigma);
-  node->get_parameter(prefix + "dyn_obs_cutoff", params_.dyn_obs_cutoff);
+  node->get_parameter(prefix + "dyn_risk_delta", params_.dyn_risk_delta);
+  node->get_parameter(prefix + "dyn_risk_beta", params_.dyn_risk_beta);
+  node->get_parameter(prefix + "dyn_robot_var", params_.dyn_robot_var);
   node->get_parameter(prefix + "lambda", params_.lambda);
   node->get_parameter(prefix + "goal_lookahead_dist", goal_lookahead_dist_);
   node->get_parameter(prefix + "debug_rollouts_enabled", debug_rollouts_enabled_);
@@ -184,6 +197,9 @@ void MppiNav2Controller::configure(
   node->get_parameter(prefix + "debug_rollouts_topic", debug_rollouts_topic_);
   node->get_parameter(prefix + "dyn_people_enabled", dyn_people_enabled_);
   node->get_parameter(prefix + "dyn_people_topic", dyn_people_topic_);
+  node->get_parameter(prefix + "dyn_people_cov_n_sigma", dyn_people_cov_n_sigma_);
+  node->get_parameter(prefix + "dyn_people_default_std", dyn_people_default_std_);
+  node->get_parameter(prefix + "dyn_people_cov_std_cap", dyn_people_cov_std_cap_);
 
   mppi_ = MPPIController(params_);
 
@@ -279,7 +295,7 @@ geometry_msgs::msg::TwistStamped MppiNav2Controller::computeVelocityCommands(
   const nav2_costmap_2d::Costmap2D * cm = costmap_;
   std::vector<RolloutDebug> rollout_debug;
   auto * rollout_ptr = debug_rollouts_enabled_ ? &rollout_debug : nullptr;
-  std::vector<std::vector<std::array<double, 2>>> dyn_people_snapshot;
+  std::vector<std::vector<DynPredictionStep>> dyn_people_snapshot;
   if (dyn_people_enabled_) {
     std::lock_guard<std::mutex> lock(dyn_people_mutex_);
     dyn_people_snapshot = dyn_people_trajs_;
@@ -364,22 +380,91 @@ void MppiNav2Controller::publishRollouts(
 void MppiNav2Controller::predictedPeopleCallback(
   const visualization_msgs::msg::MarkerArray::SharedPtr msg)
 {
-  std::vector<std::vector<std::array<double, 2>>> parsed;
-  parsed.reserve(msg->markers.size());
+  std::unordered_map<int, std::vector<std::array<double, 2>>> path_by_id;
+  std::unordered_map<int, std::unordered_map<int, std::array<double, 4>>> cov_by_id_step;
+
   for (const auto & m : msg->markers) {
-    if (m.ns != "predicted_people_path" ||
-      m.type != visualization_msgs::msg::Marker::LINE_STRIP ||
-      m.action != visualization_msgs::msg::Marker::ADD)
+    if (m.action != visualization_msgs::msg::Marker::ADD) {
+      continue;
+    }
+    if (m.ns == "predicted_people_path" &&
+      m.type == visualization_msgs::msg::Marker::LINE_STRIP)
     {
+      std::vector<std::array<double, 2>> traj;
+      traj.reserve(m.points.size());
+      for (const auto & p : m.points) {
+        traj.push_back({p.x, p.y});
+      }
+      path_by_id[m.id] = std::move(traj);
       continue;
     }
-    if (m.points.empty()) {
+    if (m.ns != "predicted_people_cov" || m.type != visualization_msgs::msg::Marker::CYLINDER) {
       continue;
     }
-    std::vector<std::array<double, 2>> traj;
-    traj.reserve(m.points.size());
-    for (const auto & p : m.points) {
-      traj.push_back({p.x, p.y});
+
+    const int person_id = m.id / 100;
+    const int step_idx = m.id % 100;
+    if (step_idx < 0) {
+      continue;
+    }
+
+    const double n_sigma = std::max(1e-3, dyn_people_cov_n_sigma_);
+    const double l1 = std::pow(std::max(1e-6, m.scale.x) / (2.0 * n_sigma), 2);
+    const double l2 = std::pow(std::max(1e-6, m.scale.y) / (2.0 * n_sigma), 2);
+
+    const double qx = m.pose.orientation.x;
+    const double qy = m.pose.orientation.y;
+    const double qz = m.pose.orientation.z;
+    const double qw = m.pose.orientation.w;
+    const double siny_cosp = 2.0 * (qw * qz + qx * qy);
+    const double cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz);
+    const double yaw = std::atan2(siny_cosp, cosy_cosp);
+
+    const double c = std::cos(yaw);
+    const double s = std::sin(yaw);
+    double s00 = c * c * l1 + s * s * l2;
+    double s01 = c * s * (l1 - l2);
+    double s11 = s * s * l1 + c * c * l2;
+
+    const double std_cap = std::max(1e-3, dyn_people_cov_std_cap_);
+    const double max_std = std::max(std::sqrt(std::max(1e-9, s00)), std::sqrt(std::max(1e-9, s11)));
+    if (max_std > std_cap) {
+      const double scale = (std_cap * std_cap) / (max_std * max_std);
+      s00 *= scale;
+      s01 *= scale;
+      s11 *= scale;
+    }
+    cov_by_id_step[person_id][step_idx] = {s00, s01, s01, s11};
+  }
+
+  std::vector<std::vector<DynPredictionStep>> parsed;
+  parsed.reserve(path_by_id.size());
+  for (auto & kv : path_by_id) {
+    const int person_id = kv.first;
+    auto & path = kv.second;
+    std::vector<DynPredictionStep> traj;
+    traj.reserve(path.size());
+    const double def_var = std::max(1e-6, dyn_people_default_std_ * dyn_people_default_std_);
+    std::array<double, 4> last_sigma{def_var, 0.0, 0.0, def_var};
+    bool has_last_sigma = false;
+    for (size_t step = 0; step < path.size(); ++step) {
+      DynPredictionStep dp;
+      dp.mu = path[step];
+      const auto person_it = cov_by_id_step.find(person_id);
+      if (person_it != cov_by_id_step.end()) {
+        const auto cov_it = person_it->second.find(static_cast<int>(step));
+        if (cov_it != person_it->second.end()) {
+          dp.sigma = cov_it->second;
+          dp.has_sigma = true;
+          last_sigma = dp.sigma;
+          has_last_sigma = true;
+        }
+      }
+      if (!dp.has_sigma) {
+        dp.sigma = has_last_sigma ? last_sigma : std::array<double, 4>{def_var, 0.0, 0.0, def_var};
+        dp.has_sigma = true;
+      }
+      traj.push_back(dp);
     }
     parsed.push_back(std::move(traj));
   }

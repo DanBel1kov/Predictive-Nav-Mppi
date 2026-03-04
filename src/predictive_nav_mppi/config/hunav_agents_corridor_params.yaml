@@ -1,0 +1,317 @@
+hunav_loader:
+  ros__parameters:
+    yaml_base_name: corridor_agents
+    simulator: Gazebo Classic
+    map: long_corridor
+    publish_people: true
+    global_goals:
+      1: {x: 12.0, y: 0.45}
+      2: {x: -12.0, y: 0.45}
+      3: {x: -12.0, y: -0.45}
+      4: {x: 12.0, y: -0.45}
+      5: {x: -4.0, y: -3.6}
+      6: {x: -4.0, y: 3.6}
+      7: {x: 2.0, y: 3.6}
+      8: {x: 2.0, y: -3.6}
+      9:  {x: -10.0, y: 2.8}
+      10: {x: -2.0,  y: 2.8}
+      11: {x: 4.0,   y: 2.8}
+      12: {x: 10.0,  y: 2.8}
+      13: {x: -10.0, y: -2.8}
+      14: {x: -2.0,  y: -2.8}
+      15: {x: 4.0,   y: -2.8}
+      16: {x: 10.0,  y: -2.8}
+      # Gap waypoints (through corridor walls) to avoid agents sticking at walls
+      17: {x: 1.5, y: 0.0}   # right gap center
+      18: {x: -3.5, y: 0.0}   # left gap center
+    agents:
+      - agent1
+      - agent2
+      - agent3
+      - agent4
+      - agent5
+      - agent6
+      - agent7
+      - agent8
+      - agent9
+      - agent10
+      - agent11
+      - agent12
+      - agent13
+      - agent14
+      - agent15
+
+    # 4 человека вперёд по центральному коридору (+x)
+    agent1:
+      id: 1
+      group_id: -1
+      skin: 4
+      max_vel: 0.427
+      radius: 0.10
+      goal_radius: 0.20
+      cyclic_goals: true
+      init_pose: {x: -12.0, y: 0.45, z: -1.0, h: 0.0}
+      behavior:
+        type: Regular
+        configuration: 1
+        goal_force_factor: 4.0
+        obstacle_force_factor: 6.5
+        social_force_factor: 1.0
+        other_force_factor: 0.5
+      goals: [2, 1]
+
+    agent2:
+      id: 2
+      group_id: -1
+      skin: 2
+      max_vel: 0.315
+      radius: 0.10
+      goal_radius: 0.20
+      cyclic_goals: true
+      init_pose: {x: -12.0, y: -0.45, z: -1.0, h: 0.0}
+      behavior:
+        type: Regular
+        configuration: 1
+        goal_force_factor: 4.0
+        obstacle_force_factor: 6.5
+        social_force_factor: 1.0
+        other_force_factor: 0.5
+      goals: [3, 4]
+
+    agent3:
+      id: 3
+      group_id: -1
+      skin: 1
+      max_vel: 0.383
+      radius: 0.10
+      goal_radius: 0.20
+      cyclic_goals: true
+      init_pose: {x: -10.0, y: 0.45, z: -1.0, h: 0.0}
+      behavior:
+        type: Regular
+        configuration: 1
+        goal_force_factor: 4.0
+        obstacle_force_factor: 6.5
+        social_force_factor: 1.0
+        other_force_factor: 0.5
+      goals: [2, 1]
+
+    agent4:
+      id: 4
+      group_id: -1
+      skin: 3
+      max_vel: 0.473
+      radius: 0.10
+      goal_radius: 0.20
+      cyclic_goals: true
+      init_pose: {x: -10.0, y: -0.45, z: -1.0, h: 0.0}
+      behavior:
+        type: Regular
+        configuration: 1
+        goal_force_factor: 4.0
+        obstacle_force_factor: 6.5
+        social_force_factor: 1.0
+        other_force_factor: 0.5
+      goals: [3, 4]
+
+    # 4 человека назад по центральному коридору (-x)
+    agent5:
+      id: 5
+      group_id: -1
+      skin: 1
+      max_vel: 0.36
+      radius: 0.10
+      goal_radius: 0.20
+      cyclic_goals: true
+      init_pose: {x: 12.0, y: 0.45, z: -1.0, h: 3.14159}
+      behavior:
+        type: Regular
+        configuration: 1
+        goal_force_factor: 4.0
+        obstacle_force_factor: 6.5
+        social_force_factor: 1.0
+        other_force_factor: 0.5
+      goals: [1, 2]
+
+    agent6:
+      id: 6
+      group_id: -1
+      skin: 2
+      max_vel: 0.594
+      radius: 0.10
+      goal_radius: 0.20
+      cyclic_goals: true
+      init_pose: {x: 12.0, y: -0.45, z: -1.0, h: 3.14159}
+      behavior:
+        type: Regular
+        configuration: 1
+        goal_force_factor: 4.0
+        obstacle_force_factor: 6.5
+        social_force_factor: 1.0
+        other_force_factor: 0.5
+      goals: [4, 3]
+
+    agent7:
+      id: 7
+      group_id: -1
+      skin: 3
+      max_vel: 0.324
+      radius: 0.10
+      goal_radius: 0.20
+      cyclic_goals: true
+      init_pose: {x: 10.0, y: 0.45, z: -1.0, h: 3.14159}
+      behavior:
+        type: Regular
+        configuration: 1
+        goal_force_factor: 4.0
+        obstacle_force_factor: 6.5
+        social_force_factor: 1.0
+        other_force_factor: 0.5
+      goals: [1, 2]
+
+    agent8:
+      id: 8
+      group_id: -1
+      skin: 4
+      max_vel: 0.648
+      radius: 0.10
+      goal_radius: 0.20
+      cyclic_goals: true
+      init_pose: {x: 10.0, y: -0.45, z: -1.0, h: 3.14159}
+      behavior:
+        type: Regular
+        configuration: 1
+        goal_force_factor: 4.0
+        obstacle_force_factor: 6.5
+        social_force_factor: 1.0
+        other_force_factor: 0.5
+      goals: [4, 3]
+
+    # 2 человека туда-сюда между двумя проёмами через центральный коридор
+    agent9:
+      id: 9
+      group_id: -1
+      skin: 1
+      max_vel: 0.486
+      radius: 0.10
+      goal_radius: 0.20
+      cyclic_goals: true
+      init_pose: {x: 1.5, y: 0.0, z: -1.0, h: 3.14159}
+      behavior:
+        type: Regular
+        configuration: 1
+        goal_force_factor: 4.0
+        obstacle_force_factor: 6.5
+        social_force_factor: 1.0
+        other_force_factor: 0.5
+      goals: [17, 18]
+
+    agent10:
+      id: 10
+      group_id: -1
+      skin: 2
+      max_vel: 0.378
+      radius: 0.10
+      goal_radius: 0.20
+      cyclic_goals: true
+      init_pose: {x: -3.5, y: 0.0, z: -1.0, h: 0.0}
+      behavior:
+        type: Regular
+        configuration: 1
+        goal_force_factor: 4.0
+        obstacle_force_factor: 6.5
+        social_force_factor: 1.0
+        other_force_factor: 0.5
+      goals: [18, 17]
+
+    # 2 человека поворачивают в проёмы (с промежуточными точками 17/18 чтобы не липли к стенке)
+    agent11:
+      id: 11
+      group_id: -1
+      skin: 3
+      max_vel: 0.585
+      radius: 0.10
+      goal_radius: 0.20
+      cyclic_goals: true
+      init_pose: {x: -12.0, y: 0.45, z: -1.0, h: 0.0}
+      behavior:
+        type: Regular
+        configuration: 1
+        goal_force_factor: 4.0
+        obstacle_force_factor: 6.5
+        social_force_factor: 1.0
+        other_force_factor: 0.5
+      goals: [2, 1, 18, 17, 7, 17, 18]
+
+    agent12:
+      id: 12
+      group_id: -1
+      skin: 4
+      max_vel: 0.381
+      radius: 0.10
+      goal_radius: 0.20
+      cyclic_goals: true
+      init_pose: {x: 12.0, y: -0.45, z: -1.0, h: 3.14159}
+      behavior:
+        type: Regular
+        configuration: 1
+        goal_force_factor: 4.0
+        obstacle_force_factor: 6.5
+        social_force_factor: 1.0
+        other_force_factor: 0.5
+      goals: [4, 3, 17, 18, 5, 18, 17]
+
+    # 3 человека по центру/разным дистанциям коридора — туда-сюда, чтобы не было пустоты
+    agent13:
+      id: 13
+      group_id: -1
+      skin: 1
+      max_vel: 0.468
+      radius: 0.10
+      goal_radius: 0.20
+      cyclic_goals: true
+      init_pose: {x: -6.0, y: 0.45, z: -1.0, h: 0.0}
+      behavior:
+        type: Regular
+        configuration: 1
+        goal_force_factor: 4.0
+        obstacle_force_factor: 6.5
+        social_force_factor: 1.0
+        other_force_factor: 0.5
+      goals: [2, 1]
+
+    agent14:
+      id: 14
+      group_id: -1
+      skin: 2
+      max_vel: 0.526
+      radius: 0.10
+      goal_radius: 0.20
+      cyclic_goals: true
+      init_pose: {x: 0.0, y: -0.45, z: -1.0, h: 0.0}
+      behavior:
+        type: Regular
+        configuration: 1
+        goal_force_factor: 4.0
+        obstacle_force_factor: 6.5
+        social_force_factor: 1.0
+        other_force_factor: 0.5
+      goals: [3, 4]
+
+    agent15:
+      id: 15
+      group_id: -1
+      skin: 3
+      max_vel: 0.41
+      radius: 0.10
+      goal_radius: 0.20
+      cyclic_goals: true
+      init_pose: {x: 6.0, y: 0.45, z: -1.0, h: 3.14159}
+      behavior:
+        type: Regular
+        configuration: 1
+        goal_force_factor: 4.0
+        obstacle_force_factor: 6.5
+        social_force_factor: 1.0
+        other_force_factor: 0.5
+      goals: [1, 2]

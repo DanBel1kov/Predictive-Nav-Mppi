@@ -54,10 +54,6 @@ bt_navigator:
     bt_loop_duration: 100
     default_server_timeout: 20
     wait_for_service_timeout: 1000
-    # 'default_nav_through_poses_bt_xml' and 'default_nav_to_pose_bt_xml' are use defaults:
-    # nav2_bt_navigator/navigate_to_pose_w_replanning_and_recovery.xml
-    # nav2_bt_navigator/navigate_through_poses_w_replanning_and_recovery.xml
-    # They can be set here or via a RewrittenYaml remap from a parent launch file to Nav2.
     plugin_lib_names:
       - nav2_compute_path_to_pose_action_bt_node
       - nav2_compute_path_through_poses_action_bt_node
@@ -124,10 +120,9 @@ controller_server:
     min_theta_velocity_threshold: 0.001
     failure_tolerance: 0.3
     progress_checker_plugin: "progress_checker"
-    goal_checker_plugins: ["general_goal_checker"] # "precise_goal_checker"
+    goal_checker_plugins: ["general_goal_checker"]
     controller_plugins: ["FollowPath"]
 
-    # Progress checker parameters
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
       required_movement_radius: 0.5
@@ -138,38 +133,57 @@ controller_server:
       xy_goal_tolerance: 0.30
       yaw_goal_tolerance: 0.50
     FollowPath:
-      plugin: "nav2_controllers::MppiNav2Controller"
-      dt: 0.1
-      horizon_steps: 54
-      n_rollouts: 200
-      v_mean: 0.4
-      omega_mean: 0.0
-      v_std: 0.16
-      omega_std: 0.45
-      v_min: 0.0
-      v_max: 0.55
-      omega_min: -1.5
-      omega_max: 1.5
-      w_goal: 3.0
-      w_obs: 25.0
-      w_ctrl: 0.3
-      w_speed: 2.0
-      w_path: 5.0
-      w_dyn_obs: 15.0
-      dyn_risk_delta: 0.05
-      dyn_risk_beta: 2.0
-      dyn_robot_var: 0.04
-      lambda: 1.5
-      goal_lookahead_dist: 0.6
-      debug_rollouts_enabled: True
-      debug_rollouts_top_n: 20
-      debug_rollouts_line_width: 0.02
-      debug_rollouts_topic: /mppi_debug_rollouts
-      dyn_people_enabled: True
-      dyn_people_topic: /predicted_people_markers
-      dyn_people_cov_n_sigma: 2.0
-      dyn_people_default_std: 0.35
-      dyn_people_cov_std_cap: 0.8
+      plugin: "nav2_mppi_controller::MPPIController"
+      time_steps: 54
+      model_dt: 0.1
+      batch_size: 200
+      iteration_count: 1
+      vx_std: 0.16
+      vy_std: 0.0
+      wz_std: 0.45
+      vx_max: 0.55
+      vx_min: -0.2
+      wz_max: 1.5
+      wz_min: -1.5
+      prune_distance: 1.7
+      transform_tolerance: 0.2
+      temperature: 0.3
+      gamma: 0.015
+      motion_model: "DiffDrive"
+      visualize: true
+      reset_period: 1.0
+      critics: [
+        "ConstraintCritic", "CostCritic", "GoalCritic",
+        "GoalAngleCritic", "PathAlignCritic", "PathFollowCritic",
+        "PathAngleCritic", "PreferForwardCritic", "PredictedPeopleCritic"
+      ]
+      ConstraintCritic.cost_weight: 4.0
+      CostCritic.cost_weight: 3.81
+      GoalCritic.cost_weight: 5.0
+      GoalCritic.threshold_to_consider: 1.4
+      GoalAngleCritic.cost_weight: 3.0
+      GoalAngleCritic.threshold_to_consider: 0.5
+      PathAlignCritic.cost_weight: 14.0
+      PathAlignCritic.threshold_to_consider: 0.5
+      PathFollowCritic.cost_weight: 5.0
+      PathFollowCritic.threshold_to_consider: 1.4
+      PathAngleCritic.cost_weight: 2.0
+      PathAngleCritic.threshold_to_consider: 0.5
+      PreferForwardCritic.cost_weight: 5.0
+      PreferForwardCritic.threshold_to_consider: 0.5
+      PredictedPeopleCritic.enabled: true
+      PredictedPeopleCritic.people_topic: "/predicted_people_markers"
+      PredictedPeopleCritic.people_path_ns: "predicted_people_path"
+      PredictedPeopleCritic.cost_weight: 12.0
+      PredictedPeopleCritic.sigma: 0.6
+      PredictedPeopleCritic.collision_distance: 0.35
+      PredictedPeopleCritic.collision_cost: 120.0
+      PredictedPeopleCritic.time_decay: 0.97
+      PredictedPeopleCritic.max_consider_distance: 2.5
+      PredictedPeopleCritic.nearest_people_per_step: 3
+      PredictedPeopleCritic.max_people: 64
+      TrajectoryVisualizer.trajectory_step: 5
+      TrajectoryVisualizer.time_step: 3
 
 local_costmap:
   local_costmap:
@@ -243,8 +257,6 @@ global_costmap:
 map_server:
   ros__parameters:
     use_sim_time: True
-    # Overridden in launch by the "map" launch configuration or provided default value.
-    # To use in yaml, remove the default "map" value in the tb3_simulation_launch.py file & provide full path to map below.
     yaml_filename: "/home/danbel1kov/predictive-nav-mppi/maps/room_map.yaml"
 
 map_saver:
@@ -323,7 +335,7 @@ velocity_smoother:
     scale_velocities: False
     feedback: "OPEN_LOOP"
     max_velocity: [0.57, 0.0, 1.0]
-    min_velocity: [0.0, 0.0, -1.0]
+    min_velocity: [-0.57, 0.0, -1.0]
     max_accel: [2.5, 0.0, 3.2]
     max_decel: [-2.5, 0.0, -3.2]
     odom_topic: "odom"

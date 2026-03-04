@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<class_libraries>
+  <library path="mppi_people_critic">
+    <class
+      type="mppi::critics::PredictedPeopleCritic"
+      base_class_type="mppi::critics::CriticFunction">
+      <description>
+        Critic for predicted people trajectories from /predicted_people_markers.
+      </description>
+    </class>
+  </library>
+</class_libraries>
+
