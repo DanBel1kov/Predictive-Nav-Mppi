@@ -22,6 +22,8 @@ setup(
             'publish_initial_pose = predictive_nav_mppi.publish_initial_pose:main',
             'people_kf_predictor = predictive_nav_mppi.people_kf_predictor:main',
             'compute_agents_proxy = predictive_nav_mppi.compute_agents_proxy:main',
+            'benchmark_episode = predictive_nav_mppi.benchmark_episode:main',
+            'run_benchmark = predictive_nav_mppi.run_benchmark:main',
         ],
     },
 )

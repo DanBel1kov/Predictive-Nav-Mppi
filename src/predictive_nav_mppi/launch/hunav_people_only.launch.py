@@ -39,34 +39,37 @@ def _make_nodes(context, *args, **kwargs):
         }],
     )
 
+    hunav_loader_node = Node(
+        package='hunav_agent_manager',
+        executable='hunav_loader',
+        name='hunav_loader',
+        output='screen',
+        parameters=[
+            hunav_params_file,
+            {'use_sim_time': use_sim_time},
+        ],
+    )
+
+    hunav_manager_node = Node(
+        package='hunav_agent_manager',
+        executable='hunav_agent_manager',
+        name='hunav_agent_manager',
+        output='screen',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'behavior_tree_path': bt_dir,
+        }],
+        remappings=(
+            [('compute_agents', 'compute_agents_raw')]
+            if humans_ignore_robot else []
+        ),
+    )
+
+    # hunav_agent_manager needs get_parameters from hunav_loader; delay so service is ready
     nodes = [
-        Node(
-            # In hunav_sim (Humble), hunav_loader is installed as an executable
-            # inside the hunav_agent_manager package (lib/hunav_agent_manager/hunav_loader).
-            package='hunav_agent_manager',
-            executable='hunav_loader',
-            name='hunav_loader',
-            output='screen',
-            parameters=[
-                hunav_params_file,
-                {'use_sim_time': use_sim_time},
-            ],
-        ),
+        hunav_loader_node,
         TimerAction(period=1.0, actions=[worldgen]),
-        Node(
-            package='hunav_agent_manager',
-            executable='hunav_agent_manager',
-            name='hunav_agent_manager',
-            output='screen',
-            parameters=[{
-                'use_sim_time': use_sim_time,
-                'behavior_tree_path': bt_dir,
-            }],
-            remappings=(
-                [('compute_agents', 'compute_agents_raw')]
-                if humans_ignore_robot else []
-            ),
-        ),
+        TimerAction(period=3.0, actions=[hunav_manager_node]),
     ]
 
     if humans_ignore_robot:

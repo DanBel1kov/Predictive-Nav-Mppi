@@ -1,0 +1,42 @@
+benchmark:
+  scenario: long_corridor
+  mppi_modes:
+    - custom
+    - standard
+  # Порядок: сначала все repeats для цели 1, потом для цели 2, …
+  # repeats: 1 — каждая сессия в свою цель; 3 — три захода в каждую цель (для статистики).
+  repeats: 1
+  gui: false
+
+  # How long to wait (wall-clock) for gzserver + Nav2 to fully start
+  startup_delay_sec: 15.0
+  # Sim-time timeout for a single navigation goal
+  nav_timeout_sec: 180.0
+  # How long to wait after initial-pose before sending the goal (sim-time)
+  settle_time_sec: 5.0
+  # Metric sampling rate (sim-time Hz)
+  sample_rate_hz: 10.0
+  # Cooldown after cleanup, before next launch (wall-clock seconds)
+  cooldown_sec: 8.0
+
+  # Geometric thresholds
+  robot_radius: 0.22
+  person_radius: 0.10
+  personal_space: 0.60
+
+  # Frames & topics
+  global_frame: map
+  robot_frame: base_link
+  people_topic: /people
+
+  # Robot always spawns at (0, 0).  Initial pose for AMCL matches spawn.
+  start:
+    x: 0.0
+    y: 0.0
+    yaw: 0.0
+
+  goals:
+    - {x:  12.0, y: 0.0, yaw: 0.0}
+    - {x: -12.0, y: 0.0, yaw: 3.14159}
+
+  output_dir: benchmark_results

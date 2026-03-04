@@ -146,17 +146,21 @@ controller_server:
       omega_mean: 0.0
       v_std: 0.16
       omega_std: 0.45
-      v_min: 0.0
+      v_min: -0.2
       v_max: 0.55
       omega_min: -1.5
       omega_max: 1.5
       w_goal: 3.0
       w_obs: 25.0
-      w_ctrl: 0.3
+      # Больше w_ctrl — плавнее управление, меньше виляния
+      w_ctrl: 1.2
       w_speed: 2.0
-      w_path: 5.0
-      w_dyn_obs: 15.0
-      dyn_risk_delta: 0.05
+      # Сильнее следование глобальному пути — меньше лишних объездов
+      w_path: 9.0
+      # Чуть слабее реакция на людей — меньше резких объездов при каждом обновлении предсказания
+      w_dyn_obs: 10.0
+      # Мягче порог риска — реагировать чуть позже, меньше превентивного виляния
+      dyn_risk_delta: 0.08
       dyn_risk_beta: 2.0
       dyn_robot_var: 0.04
       lambda: 1.5
@@ -323,7 +327,7 @@ velocity_smoother:
     scale_velocities: False
     feedback: "OPEN_LOOP"
     max_velocity: [0.57, 0.0, 1.0]
-    min_velocity: [0.0, 0.0, -1.0]
+    min_velocity: [-0.57, 0.0, -1.0]
     max_accel: [2.5, 0.0, 3.2]
     max_decel: [-2.5, 0.0, -3.2]
     odom_topic: "odom"

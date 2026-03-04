@@ -306,6 +306,7 @@ def generate_launch_description():
     )
 
     initpose = Node(
+        condition=IfCondition(LaunchConfiguration('publish_initial_pose')),
         package='predictive_nav_mppi',
         executable='publish_initial_pose',
         output='screen',

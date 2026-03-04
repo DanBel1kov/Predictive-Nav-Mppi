@@ -1,0 +1,19 @@
+{
+  "status": "SUCCEEDED",
+  "time_to_goal": 31.1,
+  "path_length": 12.7871,
+  "min_dist": 0.4431,
+  "collision_count": 0,
+  "viol_time": 1.7,
+  "samples": 311,
+  "goal": {
+    "x": 12.0,
+    "y": 0.0,
+    "yaw": 0.0
+  },
+  "start": {
+    "x": 0.0,
+    "y": 0.0,
+    "yaw": 0.0
+  }
+}

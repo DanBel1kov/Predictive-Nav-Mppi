@@ -1,0 +1,94 @@
+[
+  {
+    "status": "SUCCEEDED",
+    "time_to_goal": 35.5,
+    "path_length": 13.2543,
+    "min_dist": 0.4154,
+    "collision_count": 0,
+    "viol_time": 14.5,
+    "samples": 355,
+    "goal": {
+      "x": 12.0,
+      "y": 0.0,
+      "yaw": 0.0
+    },
+    "start": {
+      "x": 0.0,
+      "y": 0.0,
+      "yaw": 0.0
+    },
+    "episode_id": "custom_g0_r0",
+    "mppi_mode": "custom",
+    "goal_idx": 0,
+    "repeat": 0
+  },
+  {
+    "status": "SUCCEEDED",
+    "time_to_goal": 87.1,
+    "path_length": 19.6333,
+    "min_dist": 0.1717,
+    "collision_count": 5,
+    "viol_time": 14.1,
+    "samples": 871,
+    "goal": {
+      "x": -12.0,
+      "y": 0.0,
+      "yaw": 3.14159
+    },
+    "start": {
+      "x": 0.0,
+      "y": 0.0,
+      "yaw": 0.0
+    },
+    "episode_id": "custom_g1_r0",
+    "mppi_mode": "custom",
+    "goal_idx": 1,
+    "repeat": 0
+  },
+  {
+    "status": "SUCCEEDED",
+    "time_to_goal": 39.5,
+    "path_length": 13.2701,
+    "min_dist": 0.1154,
+    "collision_count": 1,
+    "viol_time": 12.7,
+    "samples": 395,
+    "goal": {
+      "x": 12.0,
+      "y": 0.0,
+      "yaw": 0.0
+    },
+    "start": {
+      "x": 0.0,
+      "y": 0.0,
+      "yaw": 0.0
+    },
+    "episode_id": "standard_g0_r0",
+    "mppi_mode": "standard",
+    "goal_idx": 0,
+    "repeat": 0
+  },
+  {
+    "status": "SUCCEEDED",
+    "time_to_goal": 38.0,
+    "path_length": 12.9933,
+    "min_dist": 0.2913,
+    "collision_count": 2,
+    "viol_time": 22.2,
+    "samples": 380,
+    "goal": {
+      "x": -12.0,
+      "y": 0.0,
+      "yaw": 3.14159
+    },
+    "start": {
+      "x": 0.0,
+      "y": 0.0,
+      "yaw": 0.0
+    },
+    "episode_id": "standard_g1_r0",
+    "mppi_mode": "standard",
+    "goal_idx": 1,
+    "repeat": 0
+  }
+]
