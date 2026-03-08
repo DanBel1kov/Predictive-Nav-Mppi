@@ -1,42 +1,52 @@
 benchmark:
   scenario: long_corridor
-  mppi_modes:
-    - custom
-    - standard
-  # Порядок: сначала все repeats для цели 1, потом для цели 2, …
-  # repeats: 1 — каждая сессия в свою цель; 3 — три захода в каждую цель (для статистики).
+
+  # Один режим за запуск. Чтобы сравнить оба — запустите дважды с разными значениями.
+  # Допустимые значения: custom | standard
+  mppi_mode: custom
+
+  # Имя модели робота в Gazebo (нужно для телепортации между эпизодами).
+  robot_model_name: waffle
+
+  # Количество повторений для каждой цели.
   repeats: 1
+
   gui: false
 
-  # How long to wait (wall-clock) for gzserver + Nav2 to fully start
+  # Сколько ждать (wall-clock) после запуска симуляции, пока Nav2 не поднимется.
   startup_delay_sec: 15.0
-  # Sim-time timeout for a single navigation goal
+  # Sim-time таймаут для одной навигационной цели.
   nav_timeout_sec: 180.0
-  # How long to wait after initial-pose before sending the goal (sim-time)
+  # Сколько ждать (sim-time) после телепортации/initialpose перед отправкой цели.
   settle_time_sec: 5.0
-  # Metric sampling rate (sim-time Hz)
+  # Частота сэмплирования метрик (sim-time Hz).
   sample_rate_hz: 10.0
-  # Cooldown after cleanup, before next launch (wall-clock seconds)
+  # Cooldown после убийства симуляции (wall-clock секунд).
   cooldown_sec: 8.0
 
-  # Geometric thresholds
+  # Геометрические пороги.
   robot_radius: 0.22
   person_radius: 0.10
   personal_space: 0.60
 
-  # Frames & topics
+  # Фреймы и топики.
   global_frame: map
   robot_frame: base_link
   people_topic: /people
 
-  # Robot always spawns at (0, 0).  Initial pose for AMCL matches spawn.
+  # Стартовая точка по умолчанию (используется если у цели нет своего start).
   start:
     x: 0.0
     y: 0.0
     yaw: 0.0
 
+  # Список целей. Можно задать start на уровне каждой цели.
   goals:
-    - {x:  12.0, y: 0.0, yaw: 0.0}
-    - {x: -12.0, y: 0.0, yaw: 3.14159}
+    - x:   12.0
+      y:    0.0
+      yaw:  0.0
+    - x: -12.0
+      y:    0.0
+      yaw:  3.14159
 
   output_dir: benchmark_results

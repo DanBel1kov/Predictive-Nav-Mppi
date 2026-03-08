@@ -94,6 +94,7 @@ def _prepare_hunav_world(context, *args, **kwargs):
             'gzserver', '--verbose',
             '-s', 'libgazebo_ros_init.so',
             '-s', 'libgazebo_ros_factory.so',
+            '-s', 'libgazebo_ros_state.so',
             scaled_world_path
         ],
         output='screen',
@@ -217,6 +218,7 @@ def generate_launch_description():
             'gzserver', '--verbose',
             '-s', 'libgazebo_ros_init.so',
             '-s', 'libgazebo_ros_factory.so',
+            '-s', 'libgazebo_ros_state.so',
             world
         ],
         output='screen',

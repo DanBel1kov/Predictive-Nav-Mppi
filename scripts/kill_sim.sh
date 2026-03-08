@@ -34,6 +34,7 @@ pkill -9 -f people_kf_predictor 2>/dev/null || true
 pkill -9 -f compute_agents_proxy 2>/dev/null || true
 pkill -9 -f publish_initial_pose 2>/dev/null || true
 pkill -9 -f benchmark_episode 2>/dev/null || true
+pkill -9 -f benchmark_session 2>/dev/null || true
 pkill -9 -f run_benchmark 2>/dev/null || true
 pkill -9 -f spawn_entity 2>/dev/null || true
 

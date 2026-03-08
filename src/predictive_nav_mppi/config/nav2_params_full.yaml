@@ -146,7 +146,7 @@ controller_server:
       omega_mean: 0.0
       v_std: 0.16
       omega_std: 0.45
-      v_min: -0.2
+      v_min: 0.0
       v_max: 0.55
       omega_min: -1.5
       omega_max: 1.5
@@ -154,7 +154,8 @@ controller_server:
       w_obs: 25.0
       # Больше w_ctrl — плавнее управление, меньше виляния
       w_ctrl: 1.2
-      w_speed: 2.0
+      # Сильное поощрение вперёд — при цели сзади предпочитает разворот, а не езду спиной
+      w_speed: 6.0
       # Сильнее следование глобальному пути — меньше лишних объездов
       w_path: 9.0
       # Чуть слабее реакция на людей — меньше резких объездов при каждом обновлении предсказания
@@ -327,7 +328,7 @@ velocity_smoother:
     scale_velocities: False
     feedback: "OPEN_LOOP"
     max_velocity: [0.57, 0.0, 1.0]
-    min_velocity: [-0.57, 0.0, -1.0]
+    min_velocity: [0.0, 0.0, -1.0]
     max_accel: [2.5, 0.0, 3.2]
     max_decel: [-2.5, 0.0, -3.2]
     odom_topic: "odom"
