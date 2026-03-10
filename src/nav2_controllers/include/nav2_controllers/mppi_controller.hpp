@@ -31,6 +31,8 @@ struct MPPIParams
   double w_ctrl = 0.3;
   double w_speed = 0.1;
   double w_path = 1.0;
+  double w_reverse = 5.0;   // штраф за езду назад (аналог PreferForwardCritic)
+  int path_lookahead_steps = 5;  // PathFollowCritic: offset ahead of nearest path idx
   double w_dyn_obs = 20.0;
   double dyn_risk_delta = 0.05;
   double dyn_risk_beta = 1.0;

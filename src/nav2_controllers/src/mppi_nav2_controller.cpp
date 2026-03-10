@@ -130,6 +130,10 @@ void MppiNav2Controller::configure(
   nav2_util::declare_parameter_if_not_declared(
     node, prefix + "w_path", rclcpp::ParameterValue(params_.w_path));
   nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "w_reverse", rclcpp::ParameterValue(params_.w_reverse));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "path_lookahead_steps", rclcpp::ParameterValue(params_.path_lookahead_steps));
+  nav2_util::declare_parameter_if_not_declared(
     node, prefix + "w_dyn_obs", rclcpp::ParameterValue(params_.w_dyn_obs));
   nav2_util::declare_parameter_if_not_declared(
     node, prefix + "dyn_risk_delta", rclcpp::ParameterValue(params_.dyn_risk_delta));
@@ -185,6 +189,8 @@ void MppiNav2Controller::configure(
   node->get_parameter(prefix + "w_ctrl", params_.w_ctrl);
   node->get_parameter(prefix + "w_speed", params_.w_speed);
   node->get_parameter(prefix + "w_path", params_.w_path);
+  node->get_parameter(prefix + "w_reverse", params_.w_reverse);
+  node->get_parameter(prefix + "path_lookahead_steps", params_.path_lookahead_steps);
   node->get_parameter(prefix + "w_dyn_obs", params_.w_dyn_obs);
   node->get_parameter(prefix + "dyn_risk_delta", params_.dyn_risk_delta);
   node->get_parameter(prefix + "dyn_risk_beta", params_.dyn_risk_beta);

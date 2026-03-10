@@ -15,11 +15,8 @@ namespace nav2_controllers
 MPPIController::MPPIController(const MPPIParams & params)
 : p_(params)
 {
-  u_seq_.resize(p_.horizon_steps * 2);
-  for (int t = 0; t < p_.horizon_steps; ++t) {
-    u_seq_[2 * t + 0] = p_.v_mean;
-    u_seq_[2 * t + 1] = p_.omega_mean;
-  }
+  // Первый запуск — нули, без bias на v_mean
+  u_seq_.resize(p_.horizon_steps * 2, 0.0);
 }
 
 std::array<double, 3> MPPIController::dynamics(
@@ -44,7 +41,7 @@ double MPPIController::stageCost(
   const std::array<double, 2> & u,
   const std::array<double, 2> & goal,
   const nav2_costmap_2d::Costmap2D * costmap,
-  const std::vector<std::array<double, 2>> * path_xy,
+  const std::vector<std::array<double, 2>> * /*path_xy*/,  // не используется — path cost вычисляется в computeControl
   const std::vector<std::vector<DynPredictionStep>> * dyn_predictions) const
 {
   // 1) расстояние до цели
@@ -52,22 +49,13 @@ double MPPIController::stageCost(
   const double dy = x[1] - goal[1];
   double cost = p_.w_goal * (dx * dx + dy * dy);
 
-  // 1.5) дистанция до глобального пути (если есть)
-  if (path_xy != nullptr && !path_xy->empty()) {
-    double best_d2 = std::numeric_limits<double>::infinity();
-    for (const auto & p : *path_xy) {
-      const double px = x[0] - p[0];
-      const double py = x[1] - p[1];
-      const double d2 = px * px + py * py;
-      if (d2 < best_d2) {
-        best_d2 = d2;
-      }
-    }
-    cost += p_.w_path * best_d2;
-  }
-
   // 2) штраф за управление
   cost += p_.w_ctrl * (u[0] * u[0] + u[1] * u[1]);
+
+  // 2.5) штраф за езду назад (аналог Nav2 PreferForwardCritic)
+  if (u[0] < 0.0) {
+    cost += p_.w_reverse * u[0] * u[0];
+  }
 
   // 3) препятствия через costmap2d (если доступен)
   if (costmap != nullptr) {
@@ -78,7 +66,8 @@ double MPPIController::stageCost(
 
       if (c == nav2_costmap_2d::LETHAL_OBSTACLE ||
           c == nav2_costmap_2d::INSCRIBED_INFLATED_OBSTACLE) {
-        obstacle_penalty = p_.w_obs * 5.0;
+        // Стены — жёсткое ограничение: множитель 20x, всегда дороже людей
+        obstacle_penalty = p_.w_obs * 20.0;
       } else if (c == nav2_costmap_2d::NO_INFORMATION) {
         obstacle_penalty = p_.w_obs * 2.0;
       } else {
@@ -88,17 +77,19 @@ double MPPIController::stageCost(
 
       cost += obstacle_penalty;
     } else {
-      // точка вне карты — тоже считаем плохо
-      cost += p_.w_obs * 5.0;
+      // точка вне карты — тоже стена
+      cost += p_.w_obs * 20.0;
     }
   }
 
   // 3.5) chance-constrained risk для динамических препятствий на шаге t
+  // Суммарный штраф от людей ограничен cap'ом — чтобы толпа не была дороже стены
   if (dyn_predictions != nullptr && p_.w_dyn_obs > 0.0) {
     const double delta = std::max(1e-6, std::min(0.49, p_.dyn_risk_delta));
     const double c = -2.0 * std::log(delta);  // chi-square quantile for dof=2
     const double beta = std::max(1e-3, p_.dyn_risk_beta);
     const double robot_var = std::max(0.0, p_.dyn_robot_var);
+    double dyn_cost_sum = 0.0;
     for (const auto & traj : *dyn_predictions) {
       if (step_idx < 0 || static_cast<size_t>(step_idx) >= traj.size()) {
         continue;
@@ -130,8 +121,12 @@ double MPPIController::stageCost(
       const double softplus = (margin > 30.0 / beta) ?
         margin :
         std::log1p(std::exp(beta * margin)) / beta;
-      cost += p_.w_dyn_obs * softplus;
+      dyn_cost_sum += p_.w_dyn_obs * softplus;
     }
+    // Cap: суммарный штраф от людей не превышает половины стоимости летального препятствия
+    // Это гарантирует что стена ВСЕГДА хуже любого числа людей
+    const double dyn_cap = p_.w_obs * 8.0;
+    cost += std::min(dyn_cost_sum, dyn_cap);
   }
 
   // 4) награда за движение вперёд
@@ -151,6 +146,26 @@ std::array<double, 2> MPPIController::computeControl(
   const int K = p_.n_rollouts;
   const int T = p_.horizon_steps;
   const double lambda = std::max(1e-6, p_.lambda);
+
+  // PathFollowCritic: найти ближайшую точку пути к x0, взять target = nearest + lookahead
+  // Это тянет робота вперёд по пути, а не просто держит близко к любой точке
+  std::array<double, 2> path_target{x0[0], x0[1]};  // fallback = текущая позиция
+  if (path_xy != nullptr && !path_xy->empty()) {
+    const int N = static_cast<int>(path_xy->size());
+    int nearest_idx = 0;
+    double best_d2 = std::numeric_limits<double>::infinity();
+    for (int i = 0; i < N; ++i) {
+      const double dx = x0[0] - (*path_xy)[i][0];
+      const double dy = x0[1] - (*path_xy)[i][1];
+      const double d2 = dx * dx + dy * dy;
+      if (d2 < best_d2) {
+        best_d2 = d2;
+        nearest_idx = i;
+      }
+    }
+    const int target_idx = std::min(nearest_idx + p_.path_lookahead_steps, N - 1);
+    path_target = (*path_xy)[target_idx];
+  }
 
   // шум (K * T * 2)
   std::vector<double> noise(K * T * 2, 0.0);
@@ -200,7 +215,14 @@ std::array<double, 2> MPPIController::computeControl(
         dbg.states.push_back(x);
       }
 
-      total_cost += stageCost(x, t, u, goal, costmap, path_xy, dyn_predictions);
+      total_cost += stageCost(x, t, u, goal, costmap, nullptr, dyn_predictions);
+
+      // PathFollowCritic: расстояние до lookahead-точки пути (тянет робота вперёд по пути)
+      if (p_.w_path > 0.0) {
+        const double pdx = x[0] - path_target[0];
+        const double pdy = x[1] - path_target[1];
+        total_cost += p_.w_path * (pdx * pdx + pdy * pdy);
+      }
     }
 
     costs[k] = total_cost;
@@ -259,13 +281,14 @@ std::array<double, 2> MPPIController::computeControl(
     u_seq_[1]
   };
 
-  // сдвиг горизонта
+  // warm-start: сдвигаем горизонт на один шаг вперёд
+  // хвост заполняем нулями (нейтральное управление, без v_mean bias)
   for (int t = 0; t < T - 1; ++t) {
     u_seq_[2 * t + 0] = u_seq_[2 * (t + 1) + 0];
     u_seq_[2 * t + 1] = u_seq_[2 * (t + 1) + 1];
   }
-  u_seq_[2 * (T - 1) + 0] = p_.v_mean;
-  u_seq_[2 * (T - 1) + 1] = p_.omega_mean;
+  u_seq_[2 * (T - 1) + 0] = 0.0;
+  u_seq_[2 * (T - 1) + 1] = 0.0;
 
   return u0;
 }
