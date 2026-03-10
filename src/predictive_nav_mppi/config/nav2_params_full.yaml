@@ -133,10 +133,10 @@ controller_server:
       required_movement_radius: 0.5
       movement_time_allowance: 10.0
     general_goal_checker:
-      stateful: True
+      stateful: False
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.30
-      yaw_goal_tolerance: 0.50
+      xy_goal_tolerance: 0.75
+      yaw_goal_tolerance: 3.14
     FollowPath:
       plugin: "nav2_controllers::MppiNav2Controller"
       dt: 0.1
@@ -165,7 +165,7 @@ controller_server:
       dyn_risk_beta: 2.0
       dyn_robot_var: 0.04
       lambda: 1.5
-      goal_lookahead_dist: 0.6
+      goal_lookahead_dist: 0.9
       debug_rollouts_enabled: True
       debug_rollouts_top_n: 20
       debug_rollouts_line_width: 0.02

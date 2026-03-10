@@ -16,6 +16,7 @@ Usage (from run_benchmark.py):
 import json
 import math
 import os
+import subprocess
 import sys
 
 import rclpy
@@ -30,7 +31,7 @@ from std_srvs.srv import Empty
 import tf2_ros
 
 try:
-    from gazebo_msgs.srv import SetEntityState, DeleteEntity, SpawnEntity
+    from gazebo_msgs.srv import SetEntityState
     from gazebo_msgs.msg import EntityState
     _HAVE_GAZEBO_MSGS = True
 except ImportError:
@@ -65,10 +66,6 @@ class BenchmarkSession(Node):
         self.robot_frame     = str(p("robot_frame",     "base_link").value)
         self.people_topic    = str(p("people_topic",    "/people").value)
         self.robot_model_name = str(p("robot_model_name", "waffle").value)
-        self.robot_model_sdf = str(
-            p("robot_model_sdf",
-              "/opt/ros/humble/share/turtlebot3_gazebo/models/turtlebot3_waffle/model.sdf").value)
-        self.robot_spawn_z = float(p("robot_spawn_z", 0.05).value)
 
         os.makedirs(self.output_dir, exist_ok=True)
 
@@ -98,36 +95,15 @@ class BenchmarkSession(Node):
         self._nav_cli = ActionClient(
             self, NavigateToPose, "navigate_to_pose", callback_group=cbg)
 
-        # Gazebo teleportation – try both common service names
+        # Gazebo teleportation
         self._gz_available = False
-        self._respawn_available = False
         self._gz_cli = None
         self._gz_cli_alt = None
-        self._delete_cli = None
-        self._delete_cli_alt = None
-        self._spawn_cli = None
-        self._spawn_cli_alt = None
-        self._pending_respawn = (0.0, 0.0, 0.0)
-        self._robot_sdf_xml = ""
         if _HAVE_GAZEBO_MSGS:
             self._gz_cli = self.create_client(
                 SetEntityState, "/gazebo/set_entity_state", callback_group=cbg)
             self._gz_cli_alt = self.create_client(
                 SetEntityState, "/set_entity_state", callback_group=cbg)
-            self._delete_cli = self.create_client(
-                DeleteEntity, "/delete_entity", callback_group=cbg)
-            self._delete_cli_alt = self.create_client(
-                DeleteEntity, "/gazebo/delete_entity", callback_group=cbg)
-            self._spawn_cli = self.create_client(
-                SpawnEntity, "/spawn_entity", callback_group=cbg)
-            self._spawn_cli_alt = self.create_client(
-                SpawnEntity, "/gazebo/spawn_entity", callback_group=cbg)
-            try:
-                with open(self.robot_model_sdf, "r", encoding="utf-8") as f:
-                    self._robot_sdf_xml = f.read()
-            except OSError as e:
-                self.get_logger().error(
-                    f"Failed to read robot_model_sdf={self.robot_model_sdf}: {e}")
 
         # Costmap clear services
         self._clear_local  = self.create_client(
@@ -145,6 +121,7 @@ class BenchmarkSession(Node):
         # Main tick (1 Hz) handles wait_nav2 and settle phases
         self._phase = "wait_nav2"
         self._phase_timer = self.create_timer(1.0, self._phase_tick, callback_group=cbg)
+        self._last_reloc_method = "none"
 
     # ── episode-local state ─────────────────────────────────────────
     def _reset_episode_state(self):
@@ -168,7 +145,7 @@ class BenchmarkSession(Node):
     def _phase_tick(self):
         if self._phase == "wait_nav2":
             if self._nav_cli.wait_for_server(timeout_sec=1.0):
-                # Discover which Gazebo service names work
+                # Discover which Gazebo relocation method works
                 if _HAVE_GAZEBO_MSGS:
                     if self._gz_cli is not None and self._gz_cli.wait_for_service(timeout_sec=3.0):
                         self._gz_available = True
@@ -181,32 +158,8 @@ class BenchmarkSession(Node):
                             "/set_entity_state ready – teleport enabled")
                     else:
                         self._gz_available = False
-                    if self._delete_cli is not None and self._delete_cli.wait_for_service(timeout_sec=2.0):
-                        pass
-                    elif self._delete_cli_alt is not None and self._delete_cli_alt.wait_for_service(timeout_sec=2.0):
-                        self._delete_cli = self._delete_cli_alt
-                    else:
-                        self._delete_cli = None
-                    if self._spawn_cli is not None and self._spawn_cli.wait_for_service(timeout_sec=2.0):
-                        pass
-                    elif self._spawn_cli_alt is not None and self._spawn_cli_alt.wait_for_service(timeout_sec=2.0):
-                        self._spawn_cli = self._spawn_cli_alt
-                    else:
-                        self._spawn_cli = None
-                    self._respawn_available = (
-                        self._delete_cli is not None and
-                        self._spawn_cli is not None and
-                        bool(self._robot_sdf_xml))
-
-                    if self._gz_available:
-                        pass
-                    elif self._respawn_available:
                         self.get_logger().warn(
-                            "set_entity_state unavailable; using delete+spawn fallback teleport")
-                    else:
-                        self.get_logger().error(
-                            "No Gazebo relocation method available (no set_entity_state and no "
-                            "delete/spawn services). Ghost obstacles are expected.")
+                            "set_entity_state unavailable; will use 'gz model' CLI fallback")
                 self.get_logger().info("Nav2 ready – starting episode 1")
                 self._start_episode()
 
@@ -238,8 +191,8 @@ class BenchmarkSession(Node):
         sx, sy = start["x"], start["y"]
         syaw = start.get("yaw", 0.0)
 
-        # 1. Move the Gazebo model
         if _HAVE_GAZEBO_MSGS and self._gz_cli is not None and self._gz_available:
+            self._last_reloc_method = "set_entity_state"
             req = SetEntityState.Request()
             state = EntityState()
             state.name = self.robot_model_name
@@ -250,22 +203,16 @@ class BenchmarkSession(Node):
             qz, qw = _yaw_quat(syaw)
             state.pose.orientation.z = qz
             state.pose.orientation.w = qw
-            state.twist = Twist()    # zero velocity
+            state.twist = Twist()
             state.reference_frame = "world"
             req.state = state
             fut = self._gz_cli.call_async(req)
             fut.add_done_callback(self._on_teleport_done)
             return
-        elif self._respawn_available:
-            self._respawn_robot(sx, sy, syaw)
-            return
-        else:
-            if not _HAVE_GAZEBO_MSGS:
-                self.get_logger().warn(
-                    "gazebo_msgs not available – using AMCL-only relocation (ghost obstacles possible)")
-            # _gz_available=False means the warning was already logged at startup
 
-        self._after_teleport(sx, sy, syaw)
+        # Fallback: use `gz model` CLI (Gazebo internal transport, no ROS plugin needed).
+        self._last_reloc_method = "gz_model_cli"
+        self._gz_model_teleport(sx, sy, syaw)
 
     def _on_teleport_done(self, future):
         ep = self._episodes[self._episode_idx]
@@ -273,77 +220,75 @@ class BenchmarkSession(Node):
         try:
             res = future.result()
             if not res.success:
-                self.get_logger().warn("Gazebo teleport returned success=False")
+                self.get_logger().warn("Gazebo set_entity_state returned success=False")
         except Exception as e:
             self.get_logger().error(f"Teleport service call failed: {e}")
         self._after_teleport(start["x"], start["y"], start.get("yaw", 0.0))
 
-    def _respawn_robot(self, x: float, y: float, yaw: float):
-        """Fallback relocation if set_entity_state is unavailable."""
-        self._pending_respawn = (x, y, yaw)
-        req = DeleteEntity.Request()
-        req.name = self.robot_model_name
-        fut = self._delete_cli.call_async(req)
-        fut.add_done_callback(self._on_delete_done)
-
-    def _on_delete_done(self, future):
+    def _gz_model_teleport(self, x: float, y: float, yaw: float):
+        """Move robot using `gz model` CLI (works with any running gzserver)."""
+        cmd = [
+            "gz", "model",
+            "-m", self.robot_model_name,
+            "-x", str(x),
+            "-y", str(y),
+            "-z", "0.05",
+            "-R", "0", "-P", "0",
+            "-Y", str(yaw),
+        ]
         try:
-            future.result()
-        except Exception as e:
-            # Deleting can fail if model does not exist yet; continue with spawn.
-            self.get_logger().warn(f"DeleteEntity returned error (continuing): {e}")
-
-        x, y, yaw = self._pending_respawn
-        req = SpawnEntity.Request()
-        req.name = self.robot_model_name
-        req.xml = self._robot_sdf_xml
-        req.robot_namespace = ""
-        req.initial_pose = Pose()
-        req.initial_pose.position.x = x
-        req.initial_pose.position.y = y
-        req.initial_pose.position.z = self.robot_spawn_z
-        qz, qw = _yaw_quat(yaw)
-        req.initial_pose.orientation.z = qz
-        req.initial_pose.orientation.w = qw
-        req.reference_frame = "world"
-        fut = self._spawn_cli.call_async(req)
-        fut.add_done_callback(self._on_spawn_done)
-
-    def _on_spawn_done(self, future):
-        x, y, yaw = self._pending_respawn
-        try:
-            res = future.result()
-            if not getattr(res, "success", False):
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=5.0)
+            if result.returncode != 0:
                 self.get_logger().warn(
-                    f"SpawnEntity returned success=False: {getattr(res, 'status_message', '')}")
+                    f"gz model returned code {result.returncode}: {result.stderr.strip()}")
+            else:
+                self.get_logger().info(f"gz model teleport OK → ({x:.2f}, {y:.2f})")
+        except FileNotFoundError:
+            self.get_logger().error(
+                "'gz' CLI not found — cannot teleport. Install gazebo command-line tools.")
+        except subprocess.TimeoutExpired:
+            self.get_logger().error("gz model command timed out")
         except Exception as e:
-            self.get_logger().error(f"SpawnEntity failed: {e}")
+            self.get_logger().error(f"gz model teleport error: {e}")
+
         self._after_teleport(x, y, yaw)
 
     def _after_teleport(self, x: float, y: float, yaw: float):
         # 2. Tell AMCL where we are (publish several times for reliability)
         self._publish_initial_pose(x, y, yaw)
 
-        # 3. Wait ~1 s for the lidar to produce a scan from the new physical
-        #    position and for AMCL to process the initialpose, THEN clear
-        #    costmaps – otherwise we'd clear before the fresh scan arrives and
-        #    the first new scan would again be projected from the wrong place.
-        _ref = [None]
+        # 3. Wait for sensors/TF after relocation then clear costmaps twice.
+        #    Respawn needs longer stabilization than set_entity_state.
+        first_wait = 1.5 if self._last_reloc_method == "set_entity_state" else 3.0
+        second_wait = 1.0
+        _ref1 = [None]
+        _ref2 = [None]
 
-        def _delayed_clear():
-            _ref[0].cancel()
-            # Re-publish once more for AMCL to be sure
+        def _clear_once():
+            _ref1[0].cancel()
             self._publish_initial_pose(x, y, yaw)
             if self._clear_local.service_is_ready():
                 self._clear_local.call_async(Empty.Request())
             if self._clear_global.service_is_ready():
                 self._clear_global.call_async(Empty.Request())
-            # 4. Settle
-            self._settle_t0 = self.get_clock().now()
-            self._phase = "settle"
 
-        t = self.create_timer(1.5, _delayed_clear, callback_group=self._cbg)
-        _ref[0] = t
+            def _clear_twice():
+                _ref2[0].cancel()
+                self._publish_initial_pose(x, y, yaw)
+                if self._clear_local.service_is_ready():
+                    self._clear_local.call_async(Empty.Request())
+                if self._clear_global.service_is_ready():
+                    self._clear_global.call_async(Empty.Request())
+                # 4. Settle
+                self._settle_t0 = self.get_clock().now()
+                self._phase = "settle"
+
+            t2 = self.create_timer(second_wait, _clear_twice, callback_group=self._cbg)
+            _ref2[0] = t2
+
+        t1 = self.create_timer(first_wait, _clear_once, callback_group=self._cbg)
+        _ref1[0] = t1
 
     def _publish_initial_pose(self, x: float, y: float, yaw: float):
         msg = PoseWithCovarianceStamped()
