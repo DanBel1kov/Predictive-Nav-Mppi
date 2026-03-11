@@ -118,7 +118,7 @@ bt_navigator_navigate_to_pose_rclcpp_node:
 controller_server:
   ros__parameters:
     use_sim_time: True
-    controller_frequency: 20.0
+    controller_frequency: 10.0
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.0
     min_theta_velocity_threshold: 0.001
@@ -140,8 +140,8 @@ controller_server:
     FollowPath:
       plugin: "nav2_controllers::MppiNav2Controller"
       dt: 0.1
-      horizon_steps: 54
-      n_rollouts: 200
+      horizon_steps: 26
+      n_rollouts: 800
       v_mean: 0.4
       omega_mean: 0.0
       v_std: 0.16
@@ -150,21 +150,31 @@ controller_server:
       v_max: 0.55
       omega_min: -1.5
       omega_max: 1.5
-      w_goal: 3.0
-      w_obs: 25.0
-      # Больше w_ctrl — плавнее управление, меньше виляния
-      w_ctrl: 1.2
-      # Сильное поощрение вперёд — при цели сзади предпочитает разворот, а не езду спиной
-      w_speed: 6.0
-      # Сильнее следование глобальному пути — меньше лишних объездов
-      w_path: 9.0
-      # Чуть слабее реакция на людей — меньше резких объездов при каждом обновлении предсказания
+      w_goal: 1.8
+      w_goal_regress: 8.0
+      w_obs: 18.0
+      w_ctrl: 0.18
+      w_speed: 4.5
+      w_path: 6.0
+      w_reverse: 5.0
+      path_lookahead_steps: 5
       w_dyn_obs: 10.0
-      # Мягче порог риска — реагировать чуть позже, меньше превентивного виляния
       dyn_risk_delta: 0.08
       dyn_risk_beta: 2.0
+      robot_radius: 0.22
       dyn_robot_var: 0.04
-      lambda: 1.5
+      dyn_cost_mode: "binary_qprob"
+      w_dyn_prob: 22.0
+      dyn_cost_cap_max: 0.0
+      w_rep: 0.28
+      gamma_rep: 0.5
+      w_exp: 0.4
+      alpha_exp: 5.0
+      r_person: 0.35
+      dyn_max_consider_distance: 1.6
+      w_still: 0.5
+      v_still_thresh: 0.05
+      lambda: 0.35
       goal_lookahead_dist: 0.9
       debug_rollouts_enabled: True
       debug_rollouts_top_n: 20
@@ -173,8 +183,8 @@ controller_server:
       dyn_people_enabled: True
       dyn_people_topic: /predicted_people_markers
       dyn_people_cov_n_sigma: 2.0
-      dyn_people_default_std: 0.35
-      dyn_people_cov_std_cap: 0.8
+      dyn_people_default_std: 0.25
+      dyn_people_cov_std_cap: 0.55
 
 local_costmap:
   local_costmap:
@@ -193,8 +203,8 @@ local_costmap:
       plugins: ["obstacle_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 15.0
-        inflation_radius: 0.3
+        cost_scaling_factor: 6.0
+        inflation_radius: 0.26
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
@@ -241,8 +251,8 @@ global_costmap:
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 8.0
-        inflation_radius: 0.3
+        cost_scaling_factor: 6.0
+        inflation_radius: 0.26
       always_send_full_costmap: True
 
 map_server:

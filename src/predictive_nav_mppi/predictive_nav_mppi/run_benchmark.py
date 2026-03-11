@@ -206,11 +206,26 @@ def main():
     startup_delay = float(cfg.get("startup_delay_sec", 30.0))
     cooldown      = float(cfg.get("cooldown_sec", 5.0))
 
+    # ── map bounds по сценарию (для проверки start/goal) ──
+    scenario = (cfg.get("scenario") or "long_corridor").strip().lower()
+    if scenario == "long_corridor":
+        # Карта коридора 20m x 6.6m, x∈[-10,10], y∈[-3.3,3.25]
+        MAP_X_MIN, MAP_X_MAX = -9.9, 9.9
+        MAP_Y_MIN, MAP_Y_MAX = -3.2, 3.2
+    else:
+        MAP_X_MIN, MAP_X_MAX = -9.9, 9.9
+        MAP_Y_MIN, MAP_Y_MAX = -3.2, 3.2
+
     # ── build episode list ───────────────────────────────────────────
     episodes = []
     for gi, goal in enumerate(goals):
         # Per-goal start overrides global start
         start = goal.get("start", default_start)
+        for pt, coords in [("start", start), ("goal", goal)]:
+            gx, gy = float(coords.get("x", 0)), float(coords.get("y", 0))
+            if not (MAP_X_MIN <= gx <= MAP_X_MAX and MAP_Y_MIN <= gy <= MAP_Y_MAX):
+                print(f"  [warn] goal {gi} {pt}=({gx:.2f},{gy:.2f}) outside map "
+                      f"[x:{MAP_X_MIN}..{MAP_X_MAX}, y:{MAP_Y_MIN}..{MAP_Y_MAX}]")
         for rep in range(repeats):
             eid = f"{mode}_g{gi}_r{rep}"
             episodes.append({

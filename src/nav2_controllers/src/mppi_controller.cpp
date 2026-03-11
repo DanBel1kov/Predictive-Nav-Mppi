@@ -41,13 +41,27 @@ double MPPIController::stageCost(
   const std::array<double, 2> & u,
   const std::array<double, 2> & goal,
   const nav2_costmap_2d::Costmap2D * costmap,
-  const std::vector<std::array<double, 2>> * /*path_xy*/,  // не используется — path cost вычисляется в computeControl
-  const std::vector<std::vector<DynPredictionStep>> * dyn_predictions) const
+  const std::vector<std::array<double, 2>> * /*path_xy*/,
+  const std::vector<std::vector<DynPredictionStep>> * dyn_predictions,
+  const std::array<double, 3> & x0_rollout) const
 {
   // 1) расстояние до цели
   const double dx = x[0] - goal[0];
   const double dy = x[1] - goal[1];
   double cost = p_.w_goal * (dx * dx + dy * dy);
+
+  // 1.5) штраф за регрессию: если уехали дальше от цели, чем в начале роллаута — большой доп. штраф
+  if (p_.w_goal_regress > 0.0) {
+    const double dist_sq = dx * dx + dy * dy;
+    const double d0x = x0_rollout[0] - goal[0];
+    const double d0y = x0_rollout[1] - goal[1];
+    const double dist0_sq = d0x * d0x + d0y * d0y;
+    const double dist = std::sqrt(dist_sq + 1e-18);
+    const double dist0 = std::sqrt(dist0_sq + 1e-18);
+    if (dist > dist0) {
+      cost += p_.w_goal_regress * (dist - dist0);
+    }
+  }
 
   // 2) штраф за управление
   cost += p_.w_ctrl * (u[0] * u[0] + u[1] * u[1]);
@@ -55,6 +69,30 @@ double MPPIController::stageCost(
   // 2.5) штраф за езду назад (аналог Nav2 PreferForwardCritic)
   if (u[0] < 0.0) {
     cost += p_.w_reverse * u[0] * u[0];
+  }
+
+  // 2.6) штраф за стоянку только когда рядом никого нет («ленивая» стоянка); при человеке рядом — не штрафуем (ожидание уместно)
+  if (p_.w_still > 0.0 && std::fabs(u[0]) < p_.v_still_thresh) {
+    bool someone_nearby = false;
+    if (dyn_predictions != nullptr) {
+      const double max_d = std::max(0.1, p_.dyn_max_consider_distance);
+      const double max_d_sq = max_d * max_d;
+      for (const auto & traj : *dyn_predictions) {
+        if (step_idx < 0 || static_cast<size_t>(step_idx) >= traj.size()) {
+          continue;
+        }
+        const auto & mu = traj[static_cast<size_t>(step_idx)].mu;
+        const double dx_p = x[0] - mu[0];
+        const double dy_p = x[1] - mu[1];
+        if ((dx_p * dx_p + dy_p * dy_p) <= max_d_sq) {
+          someone_nearby = true;
+          break;
+        }
+      }
+    }
+    if (!someone_nearby) {
+      cost += p_.w_still;
+    }
   }
 
   // 3) препятствия через costmap2d (если доступен)
@@ -66,8 +104,9 @@ double MPPIController::stageCost(
 
       if (c == nav2_costmap_2d::LETHAL_OBSTACLE ||
           c == nav2_costmap_2d::INSCRIBED_INFLATED_OBSTACLE) {
-        // Стены — жёсткое ограничение: множитель 20x, всегда дороже людей
-        obstacle_penalty = p_.w_obs * 20.0;
+        // Стены/столбы — очень высокий штраф, чтобы не врезаться вместо объезда между человеком и стеной
+        const double lethal_mult = 28.0;
+        obstacle_penalty = p_.w_obs * lethal_mult;
       } else if (c == nav2_costmap_2d::NO_INFORMATION) {
         obstacle_penalty = p_.w_obs * 2.0;
       } else {
@@ -78,17 +117,25 @@ double MPPIController::stageCost(
       cost += obstacle_penalty;
     } else {
       // точка вне карты — тоже стена
-      cost += p_.w_obs * 20.0;
+      cost += p_.w_obs * 28.0;
     }
   }
 
-  // 3.5) chance-constrained risk для динамических препятствий на шаге t
-  // Суммарный штраф от людей ограничен cap'ом — чтобы толпа не была дороже стены
-  if (dyn_predictions != nullptr && p_.w_dyn_obs > 0.0) {
+  // 3.5) Composite dynamic cost (paper): q_dyn = qrep + qexp + qprob
+  // qrep = w_rep/(dist²+gamma_rep), qexp = w_exp*exp(-alpha_exp*(dist-d_safe)), qprob = chance-constraint term
+  const bool use_binary = (p_.dyn_cost_mode == "binary_qprob");
+  const bool qprob_active = use_binary ? (p_.w_dyn_prob > 0.0) : (p_.w_dyn_obs > 0.0);
+  const bool dyn_active = dyn_predictions != nullptr &&
+    (p_.w_rep > 0.0 || p_.w_exp > 0.0 || qprob_active);
+  if (dyn_active) {
     const double delta = std::max(1e-6, std::min(0.49, p_.dyn_risk_delta));
-    const double c = -2.0 * std::log(delta);  // chi-square quantile for dof=2
     const double beta = std::max(1e-3, p_.dyn_risk_beta);
+    const double r_robot = std::max(1e-6, p_.robot_radius);
+    const double A_r = 3.141592653589793 * r_robot * r_robot;
     const double robot_var = std::max(0.0, p_.dyn_robot_var);
+    const double d_safe = r_robot + std::max(0.0, p_.r_person) + 0.25;
+    const double max_dist = std::max(0.1, p_.dyn_max_consider_distance);
+    const double max_dist_sq = max_dist * max_dist;
     double dyn_cost_sum = 0.0;
     for (const auto & traj : *dyn_predictions) {
       if (step_idx < 0 || static_cast<size_t>(step_idx) >= traj.size()) {
@@ -97,36 +144,56 @@ double MPPIController::stageCost(
       const auto & pred = traj[static_cast<size_t>(step_idx)];
       const double dx = x[0] - pred.mu[0];
       const double dy = x[1] - pred.mu[1];
-
-      if (!pred.has_sigma) {
+      const double dist_sq = dx * dx + dy * dy;
+      if (dist_sq > max_dist_sq) {
         continue;
       }
+      const double dist = std::sqrt(dist_sq + 1e-18);
 
-      const double s00 = pred.sigma[0] + robot_var;
-      const double s01 = pred.sigma[1];
-      const double s10 = pred.sigma[2];
-      const double s11 = pred.sigma[3] + robot_var;
-      const double det = s00 * s11 - s01 * s10;
-      if (det < 1e-12) {
-        continue;
+      double qrep_term = 0.0;
+      if (p_.w_rep > 0.0) {
+        qrep_term = p_.w_rep / (dist_sq + std::max(1e-6, p_.gamma_rep));
       }
-
-      const double inv00 = s11 / det;
-      const double inv01 = -s01 / det;
-      const double inv10 = -s10 / det;
-      const double inv11 = s00 / det;
-      const double d2 = dx * (inv00 * dx + inv01 * dy) + dy * (inv10 * dx + inv11 * dy);
-
-      const double margin = c - d2;
-      const double softplus = (margin > 30.0 / beta) ?
-        margin :
-        std::log1p(std::exp(beta * margin)) / beta;
-      dyn_cost_sum += p_.w_dyn_obs * softplus;
+      double qexp_term = 0.0;
+      if (p_.w_exp > 0.0) {
+        qexp_term = p_.w_exp * std::exp(-p_.alpha_exp * (dist - d_safe));
+      }
+      double qprob_term = 0.0;
+      if (qprob_active && pred.has_sigma) {
+        const double sc00 = pred.sigma[0] + robot_var;
+        const double sc01 = pred.sigma[1];
+        const double sc10 = pred.sigma[2];
+        const double sc11 = pred.sigma[3] + robot_var;
+        const double det_c = sc00 * sc11 - sc01 * sc10;
+        if (det_c >= 1e-12) {
+          const double eta_c = 2.0 * 3.141592653589793 * std::sqrt(det_c);
+          const double ratio = std::max(1e-12, (eta_c * delta) / std::max(1e-12, A_r));
+          const double kappa = -2.0 * std::log(ratio);
+          const double inv00 = sc11 / det_c;
+          const double inv01 = -sc01 / det_c;
+          const double inv10 = -sc10 / det_c;
+          const double inv11 = sc00 / det_c;
+          const double d2 = dx * (inv00 * dx + inv01 * dy) + dy * (inv10 * dx + inv11 * dy);
+          if (use_binary) {
+            if (d2 < kappa) {
+              qprob_term = p_.w_dyn_prob;
+            }
+          } else {
+            const double margin = kappa - d2;
+            const double softplus = (margin > 30.0 / beta) ?
+              margin :
+              std::log1p(std::exp(beta * margin)) / beta;
+            qprob_term = p_.w_dyn_obs * softplus;
+          }
+        }
+      }
+      dyn_cost_sum += qrep_term + qexp_term + qprob_term;
     }
-    // Cap: суммарный штраф от людей не превышает половины стоимости летального препятствия
-    // Это гарантирует что стена ВСЕГДА хуже любого числа людей
-    const double dyn_cap = p_.w_obs * 8.0;
-    cost += std::min(dyn_cost_sum, dyn_cap);
+    if (p_.dyn_cost_cap_max > 0.0) {
+      cost += std::min(dyn_cost_sum, p_.dyn_cost_cap_max);
+    } else {
+      cost += dyn_cost_sum;
+    }
   }
 
   // 4) награда за движение вперёд
@@ -215,7 +282,7 @@ std::array<double, 2> MPPIController::computeControl(
         dbg.states.push_back(x);
       }
 
-      total_cost += stageCost(x, t, u, goal, costmap, nullptr, dyn_predictions);
+      total_cost += stageCost(x, t, u, goal, costmap, nullptr, dyn_predictions, x0);
 
       // PathFollowCritic: расстояние до lookahead-точки пути (тянет робота вперёд по пути)
       if (p_.w_path > 0.0) {

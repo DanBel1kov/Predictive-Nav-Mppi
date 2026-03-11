@@ -114,7 +114,7 @@ bt_navigator_navigate_to_pose_rclcpp_node:
 controller_server:
   ros__parameters:
     use_sim_time: True
-    controller_frequency: 20.0
+    controller_frequency: 10.0
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.0
     min_theta_velocity_threshold: 0.001
@@ -158,7 +158,7 @@ controller_server:
         "PathAngleCritic", "PreferForwardCritic", "PredictedPeopleCritic"
       ]
       ConstraintCritic.cost_weight: 4.0
-      CostCritic.cost_weight: 3.81
+      CostCritic.cost_weight: 2.0
       GoalCritic.cost_weight: 3.0
       GoalCritic.threshold_to_consider: 1.4
       GoalAngleCritic.cost_weight: 3.0
@@ -202,8 +202,8 @@ local_costmap:
       plugins: ["obstacle_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 15.0
-        inflation_radius: 0.3
+        cost_scaling_factor: 6.0
+        inflation_radius: 0.26
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
@@ -250,8 +250,8 @@ global_costmap:
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 8.0
-        inflation_radius: 0.3
+        cost_scaling_factor: 6.0
+        inflation_radius: 0.26
       always_send_full_costmap: True
 
 map_server:

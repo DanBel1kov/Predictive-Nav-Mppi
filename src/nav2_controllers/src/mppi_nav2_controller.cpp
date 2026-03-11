@@ -122,6 +122,8 @@ void MppiNav2Controller::configure(
   nav2_util::declare_parameter_if_not_declared(
     node, prefix + "w_goal", rclcpp::ParameterValue(params_.w_goal));
   nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "w_goal_regress", rclcpp::ParameterValue(params_.w_goal_regress));
+  nav2_util::declare_parameter_if_not_declared(
     node, prefix + "w_obs", rclcpp::ParameterValue(params_.w_obs));
   nav2_util::declare_parameter_if_not_declared(
     node, prefix + "w_ctrl", rclcpp::ParameterValue(params_.w_ctrl));
@@ -140,7 +142,32 @@ void MppiNav2Controller::configure(
   nav2_util::declare_parameter_if_not_declared(
     node, prefix + "dyn_risk_beta", rclcpp::ParameterValue(params_.dyn_risk_beta));
   nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "robot_radius", rclcpp::ParameterValue(params_.robot_radius));
+  nav2_util::declare_parameter_if_not_declared(
     node, prefix + "dyn_robot_var", rclcpp::ParameterValue(params_.dyn_robot_var));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "dyn_cost_mode", rclcpp::ParameterValue(params_.dyn_cost_mode));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "w_dyn_prob", rclcpp::ParameterValue(params_.w_dyn_prob));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "dyn_cost_cap_max", rclcpp::ParameterValue(params_.dyn_cost_cap_max));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "w_rep", rclcpp::ParameterValue(params_.w_rep));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "gamma_rep", rclcpp::ParameterValue(params_.gamma_rep));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "w_exp", rclcpp::ParameterValue(params_.w_exp));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "alpha_exp", rclcpp::ParameterValue(params_.alpha_exp));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "r_person", rclcpp::ParameterValue(params_.r_person));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "dyn_max_consider_distance",
+    rclcpp::ParameterValue(params_.dyn_max_consider_distance));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "w_still", rclcpp::ParameterValue(params_.w_still));
+  nav2_util::declare_parameter_if_not_declared(
+    node, prefix + "v_still_thresh", rclcpp::ParameterValue(params_.v_still_thresh));
   nav2_util::declare_parameter_if_not_declared(
     node, prefix + "lambda", rclcpp::ParameterValue(params_.lambda));
   nav2_util::declare_parameter_if_not_declared(
@@ -185,6 +212,7 @@ void MppiNav2Controller::configure(
   node->get_parameter(prefix + "omega_min", params_.omega_min);
   node->get_parameter(prefix + "omega_max", params_.omega_max);
   node->get_parameter(prefix + "w_goal", params_.w_goal);
+  node->get_parameter(prefix + "w_goal_regress", params_.w_goal_regress);
   node->get_parameter(prefix + "w_obs", params_.w_obs);
   node->get_parameter(prefix + "w_ctrl", params_.w_ctrl);
   node->get_parameter(prefix + "w_speed", params_.w_speed);
@@ -194,7 +222,19 @@ void MppiNav2Controller::configure(
   node->get_parameter(prefix + "w_dyn_obs", params_.w_dyn_obs);
   node->get_parameter(prefix + "dyn_risk_delta", params_.dyn_risk_delta);
   node->get_parameter(prefix + "dyn_risk_beta", params_.dyn_risk_beta);
+  node->get_parameter(prefix + "robot_radius", params_.robot_radius);
   node->get_parameter(prefix + "dyn_robot_var", params_.dyn_robot_var);
+  node->get_parameter(prefix + "dyn_cost_mode", params_.dyn_cost_mode);
+  node->get_parameter(prefix + "w_dyn_prob", params_.w_dyn_prob);
+  node->get_parameter(prefix + "dyn_cost_cap_max", params_.dyn_cost_cap_max);
+  node->get_parameter(prefix + "w_rep", params_.w_rep);
+  node->get_parameter(prefix + "gamma_rep", params_.gamma_rep);
+  node->get_parameter(prefix + "w_exp", params_.w_exp);
+  node->get_parameter(prefix + "alpha_exp", params_.alpha_exp);
+  node->get_parameter(prefix + "r_person", params_.r_person);
+  node->get_parameter(prefix + "dyn_max_consider_distance", params_.dyn_max_consider_distance);
+  node->get_parameter(prefix + "w_still", params_.w_still);
+  node->get_parameter(prefix + "v_still_thresh", params_.v_still_thresh);
   node->get_parameter(prefix + "lambda", params_.lambda);
   node->get_parameter(prefix + "goal_lookahead_dist", goal_lookahead_dist_);
   node->get_parameter(prefix + "debug_rollouts_enabled", debug_rollouts_enabled_);
