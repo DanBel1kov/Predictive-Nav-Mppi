@@ -320,10 +320,25 @@ def generate_launch_description():
         }],
     )
 
-    people_kf_predictor = Node(
+    predictor_type = LaunchConfiguration('predictor_type', default='kalman')
+    model_weights_path = LaunchConfiguration(
+        'model_weights_path',
+        default='/home/danbel1kov/predictive-nav-mppi/src/predictive_nav_mppi/predictive_nav_mppi/models/best_model.pt',
+    )
+    model_flip_forward_axis = LaunchConfiguration('model_flip_forward_axis', default='False')
+    social_vae_repo_path = LaunchConfiguration('social_vae_repo_path', default='')
+    social_vae_ckpt_path = LaunchConfiguration(
+        'social_vae_ckpt_path',
+        default='/home/danbel1kov/predictive-nav-mppi/src/predictive_nav_mppi/predictive_nav_mppi/models/vae_hotel',
+    )
+    social_vae_config_path = LaunchConfiguration('social_vae_config_path', default='')
+    social_vae_device = LaunchConfiguration('social_vae_device', default='')
+    social_vae_pred_samples = LaunchConfiguration('social_vae_pred_samples', default='20')
+
+    people_predictor = Node(
         package='predictive_nav_mppi',
-        executable='people_kf_predictor',
-        name='people_kf_predictor',
+        executable='people_predictor',
+        name='people_predictor',
         output='screen',
         parameters=[{
             'use_sim_time': use_sim_time,
@@ -334,8 +349,8 @@ def generate_launch_description():
             'pred_dt': 0.1,
             'pred_steps': 50,
             'sigma_meas': 0.08,
-            'sigma_acc': 0.25,
-            'sigma_p0': 0.2,
+            'sigma_acc': 0.06,
+            'sigma_p0': 0.06,
             'sigma_v0': 0.8,
             'min_dt': 0.02,
             'max_dt': 0.3,
@@ -343,15 +358,39 @@ def generate_launch_description():
             'max_people': 100,
             'publish_markers': True,
             'publish_ellipses': True,
-            'ellipse_steps': 12,
+            'ellipse_steps': 4,
             'frame_id_override': '',
+            'predictor_type': predictor_type,
+            'model_weights_path': model_weights_path,
+            'model_obs_len': 8,
+            'model_obs_dt': 0.4,
+            'model_pred_steps_use': 5,
+            'model_device': '',
+            'model_ellipse_std': 0.08,
+            'max_ellipse_scale': 0.25,
+            'model_flip_forward_axis': model_flip_forward_axis,
+            'social_vae_repo_path': social_vae_repo_path,
+            'social_vae_ckpt_path': social_vae_ckpt_path,
+            'social_vae_config_path': social_vae_config_path,
+            'social_vae_ob_horizon': 8,
+            'social_vae_pred_horizon': 12,
+            'social_vae_ob_radius': 2.0,
+            'social_vae_hidden_dim': 256,
+            'social_vae_obs_dt': 0.4,
+            'social_vae_pred_steps_use': 26,
+            'social_vae_pred_samples': social_vae_pred_samples,
+            'social_vae_max_neighbors': 16,
+            'social_vae_neighbor_pad': 1e9,
+            'social_vae_cov_std_floor': 0.08,
+            'social_vae_device': social_vae_device,
         }],
     )
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='True'),
         DeclareLaunchArgument('gui', default_value='True'),
-        DeclareLaunchArgument('scenario', default_value='room_box'),
+        DeclareLaunchArgument('scenario', default_value='long_corridor',
+                              description='World scenario: room_box or long_corridor'),
         DeclareLaunchArgument('mppi_mode', default_value='custom'),
         DeclareLaunchArgument('world', default_value=''),
         DeclareLaunchArgument('map', default_value=''),
@@ -364,6 +403,25 @@ def generate_launch_description():
         DeclareLaunchArgument('use_hunav', default_value='True'),
         DeclareLaunchArgument('hunav_params_file', default_value=''),
         DeclareLaunchArgument('humans_ignore_robot', default_value='True'),
+        DeclareLaunchArgument('predictor_type', default_value='kalman',
+                              description='People predictor backend: kalman, model (SocialGRU), or social_vae'),
+        DeclareLaunchArgument('model_weights_path',
+                              default_value='/home/danbel1kov/predictive-nav-mppi/src/predictive_nav_mppi/predictive_nav_mppi/models/best_model.pt',
+                              description='Path to .pt weights for model backend (used when predictor_type=model)'),
+        DeclareLaunchArgument('model_flip_forward_axis', default_value='False',
+                              description='If predictions point backward, set True (model trained with opposite forward axis)'),
+        DeclareLaunchArgument('social_vae_repo_path', default_value='',
+                              description='Path to external SocialVAE repo root (used when predictor_type=social_vae)'),
+        DeclareLaunchArgument(
+                              'social_vae_ckpt_path',
+                              default_value='/home/danbel1kov/predictive-nav-mppi/src/predictive_nav_mppi/predictive_nav_mppi/models/vae_hotel',
+                              description='Path to SocialVAE checkpoint file or directory with ckpt-best'),
+        DeclareLaunchArgument('social_vae_config_path', default_value='',
+                              description='Optional path to SocialVAE config .py (e.g. config/hotel.py)'),
+        DeclareLaunchArgument('social_vae_device', default_value='',
+                              description='SocialVAE device: "" auto, or cpu/cuda'),
+        DeclareLaunchArgument('social_vae_pred_samples', default_value='20',
+                              description='Number of SocialVAE sampled futures per person'),
 
         OpaqueFunction(function=_resolve_scenario_assets),
 
@@ -379,6 +437,6 @@ def generate_launch_description():
         nav2_delayed,
         rviz_delayed,
         hunav_delayed,
-        people_kf_predictor,
+        people_predictor,
         initpose,
     ])

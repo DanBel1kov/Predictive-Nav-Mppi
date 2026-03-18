@@ -1,7 +1,16 @@
 benchmark:
   scenario: long_corridor
 
-  mppi_mode: standard
+  # "custom" = твой MPPI (nav2_controllers::MppiNav2Controller) + сэмплы траекторий в RViz + предсказания людей
+  # "standard" = стандартный Nav2 MPPI (nav2_mppi_controller), без твоих критиков по людям
+  mppi_mode: custom
+  # People predictor: "kalman" (CV filter), "model" (Social GRU) or "social_vae"
+  predictor_type: social_vae
+  # SocialVAE paths
+  social_vae_repo_path: "/home/danbel1kov/SocialVAE"
+  social_vae_ckpt_path: "/home/danbel1kov/predictive-nav-mppi/src/predictive_nav_mppi/predictive_nav_mppi/models/vae_hotel"
+  social_vae_config_path: "/home/danbel1kov/SocialVAE/config/hotel.py"
+  social_vae_pred_samples: 20
   robot_model_name: waffle
   repeats: 1
 

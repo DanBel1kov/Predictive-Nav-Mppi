@@ -1,0 +1,66 @@
+# People predictor: switch between Kalman and learned model
+# Use with: people_predictor node (unified). Launch args override:
+#   predictor_type:=kalman  |  predictor_type:=model  |  predictor_type:=social_vae
+#   model_weights_path:=/path/to/checkpoints/best_by_val_ADE.pt
+
+# Backend: "kalman", "model" (Social GRU), or "social_vae"
+predictor_type: "kalman"
+
+# Path to .pt checkpoint (required when predictor_type=model)
+model_weights_path: "/home/danbel1kov/predictive-nav-mppi/src/predictive_nav_mppi/predictive_nav_mppi/models/best_model.pt"
+
+# Model-specific (only when predictor_type=model)
+model_obs_len: 8   # must match training (obs_len)
+model_obs_dt: 0.4  # time (s) between observation frames — match TrajNet (~2.5 fps)
+# Сколько шагов предсказания модели использовать (меньше = короче траектории, не «прямо вдаль»)
+model_pred_steps_use: 5
+model_device: ""   # "" = auto (cuda if available), or "cpu" / "cuda"
+# Радиус неопределённости (м) для эллипсов при model: зона учитывается в cost MPPI (chance-constraint).
+# Должен совпадать с dyn_people_default_std в контроллере, если не задаёте эллипсы вручную.
+model_ellipse_std: 0.08
+# Макс. полуось эллипса (м) — ограничение визуализации и зоны cost
+max_ellipse_scale: 0.25
+
+# Common
+input_topic: "/people"
+output_cloud_topic: "/predicted_people_cloud"
+output_markers_topic: "/predicted_people_markers"
+publish_rate_hz: 10.0
+pred_dt: 0.1
+pred_steps: 50
+track_timeout: 1.0
+max_people: 100
+publish_markers: true
+publish_ellipses: true
+ellipse_steps: 4
+# Если маркеры предсказаний не совпадают с картой в RViz — задайте frame, в котором карта (часто "map")
+frame_id_override: ""
+# Если предсказания идут «назад» — попробуйте true (модель обучена с другой осью «вперёд»)
+model_flip_forward_axis: false
+
+# SocialVAE-specific (used when predictor_type=social_vae)
+# Path to cloned SocialVAE repo root (contains social_vae.py)
+social_vae_repo_path: ""
+# Path to checkpoint file (ckpt-best) or directory containing ckpt-best
+social_vae_ckpt_path: "/home/danbel1kov/predictive-nav-mppi/src/predictive_nav_mppi/predictive_nav_mppi/models/vae_hotel"
+# Optional config .py (e.g. SocialVAE/config/hotel.py), overrides params below
+social_vae_config_path: ""
+social_vae_ob_horizon: 8
+social_vae_pred_horizon: 12
+social_vae_ob_radius: 2.0
+social_vae_hidden_dim: 256
+social_vae_obs_dt: 0.4
+social_vae_pred_steps_use: 26
+social_vae_pred_samples: 20
+social_vae_max_neighbors: 16
+social_vae_neighbor_pad: 1000000000.0
+social_vae_cov_std_floor: 0.08
+social_vae_device: ""
+
+# Kalman-only (ignored when predictor_type=model/social_vae)
+sigma_meas: 0.08
+sigma_acc: 0.06
+sigma_p0: 0.06
+sigma_v0: 0.8
+min_dt: 0.02
+max_dt: 0.3

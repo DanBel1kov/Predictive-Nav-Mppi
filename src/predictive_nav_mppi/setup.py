@@ -21,10 +21,13 @@ setup(
         'console_scripts': [
             'publish_initial_pose = predictive_nav_mppi.publish_initial_pose:main',
             'people_kf_predictor = predictive_nav_mppi.people_kf_predictor:main',
+            'people_predictor = predictive_nav_mppi.people_predictor:main',
             'compute_agents_proxy = predictive_nav_mppi.compute_agents_proxy:main',
             'benchmark_episode = predictive_nav_mppi.benchmark_episode:main',
             'benchmark_session = predictive_nav_mppi.benchmark_session:main',
             'run_benchmark = predictive_nav_mppi.run_benchmark:main',
+            'record_people_dataset = predictive_nav_mppi.record_people_dataset:main',
+            'benchmark_people_predictors = predictive_nav_mppi.benchmark_people_predictors:main',
         ],
     },
 )

@@ -7,8 +7,17 @@ episodes instead of restarting Gazebo.
 
 Usage
 -----
+    # From repo root, after: source install/setup.bash
     ros2 run predictive_nav_mppi run_benchmark \\
         --config src/predictive_nav_mppi/config/benchmark_config.yaml
+
+With people (HuNav) and predictive model
+---------------------------------------
+    In benchmark_config.yaml set:
+      predictor_type: model   # or "kalman" / "social_vae"
+    Then run the same command. The launch starts HuNav (people), the
+    people_predictor node (kalman / model / social_vae), and Nav2 with MPPI that
+    uses /predicted_people_markers for dynamic obstacles.
 """
 
 import argparse
@@ -31,7 +40,16 @@ import yaml
 # Simulation helpers
 # ─────────────────────────────────────────────────────────────────────
 
-def _launch_sim(scenario: str, mppi_mode: str, gui: bool = False) -> subprocess.Popen:
+def _launch_sim(
+    scenario: str,
+    mppi_mode: str,
+    gui: bool = False,
+    predictor_type: str = "kalman",
+    social_vae_repo_path: str = "",
+    social_vae_ckpt_path: str = "",
+    social_vae_config_path: str = "",
+    social_vae_pred_samples: int = 20,
+) -> subprocess.Popen:
     cmd = [
         "ros2", "launch", "predictive_nav_mppi", "sim_nav2.launch.py",
         f"scenario:={scenario}",
@@ -40,7 +58,15 @@ def _launch_sim(scenario: str, mppi_mode: str, gui: bool = False) -> subprocess.
         "use_hunav:=True",
         "humans_ignore_robot:=True",
         "publish_initial_pose:=False",
+        f"predictor_type:={predictor_type}",
     ]
+    if social_vae_repo_path:
+        cmd.append(f"social_vae_repo_path:={social_vae_repo_path}")
+    if social_vae_ckpt_path:
+        cmd.append(f"social_vae_ckpt_path:={social_vae_ckpt_path}")
+    if social_vae_config_path:
+        cmd.append(f"social_vae_config_path:={social_vae_config_path}")
+    cmd.append(f"social_vae_pred_samples:={int(social_vae_pred_samples)}")
     return subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
@@ -75,7 +101,7 @@ def _cleanup_orphans():
         "smoother_server", "lifecycle_manager", "amcl", "map_server",
         "component_container_isolated", "component_container",
         "robot_state_publisher", "rviz2",
-        "people_kf_predictor", "compute_agents_proxy",
+        "people_predictor", "people_kf_predictor", "compute_agents_proxy",
         "publish_initial_pose", "benchmark_episode", "benchmark_session",
         "spawn_entity",
     ]
@@ -186,6 +212,20 @@ def main():
     with open(args.config) as f:
         cfg = yaml.safe_load(f)["benchmark"]
 
+    # ── predictor: kalman | model (Social GRU) | social_vae
+    predictor_type = str(cfg.get("predictor_type", "kalman")).strip().lower()
+    if predictor_type not in ("kalman", "model", "social_vae", "socialvae", "social_gru"):
+        predictor_type = "kalman"
+    if predictor_type == "socialvae":
+        predictor_type = "social_vae"
+    if predictor_type == "social_gru":
+        predictor_type = "model"
+
+    social_vae_repo_path = str(cfg.get("social_vae_repo_path", "")).strip()
+    social_vae_ckpt_path = str(cfg.get("social_vae_ckpt_path", "")).strip()
+    social_vae_config_path = str(cfg.get("social_vae_config_path", "")).strip()
+    social_vae_pred_samples = int(cfg.get("social_vae_pred_samples", 20))
+
     # ── resolve single mppi_mode ─────────────────────────────────────
     if "mppi_mode" in cfg:
         mode = str(cfg["mppi_mode"])
@@ -251,13 +291,22 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n{'=' * 64}")
-    print(f"  BENCHMARK  |  mode={mode}  |  {total} episodes  |  {timestamp}")
+    print(f"  BENCHMARK  |  mode={mode}  |  predictor={predictor_type}  |  {total} episodes  |  {timestamp}")
     print(f"{'=' * 64}")
     print(f"  goals={len(goals)}  repeats={repeats}  startup={startup_delay:.0f}s")
     print(f"  output: {output_dir}")
 
     # ── launch simulation ────────────────────────────────────────────
-    sim = _launch_sim(cfg["scenario"], mode, gui=gui)
+    sim = _launch_sim(
+        cfg["scenario"],
+        mode,
+        gui=gui,
+        predictor_type=predictor_type,
+        social_vae_repo_path=social_vae_repo_path,
+        social_vae_ckpt_path=social_vae_ckpt_path,
+        social_vae_config_path=social_vae_config_path,
+        social_vae_pred_samples=social_vae_pred_samples,
+    )
     print(f"\n  Launched sim (pid {sim.pid}).  Waiting {startup_delay:.0f}s for Nav2 …")
     time.sleep(startup_delay)
 
