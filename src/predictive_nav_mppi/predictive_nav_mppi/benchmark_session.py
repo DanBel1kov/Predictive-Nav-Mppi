@@ -20,6 +20,7 @@ import subprocess
 import sys
 
 import rclpy
+from std_msgs.msg import Float32MultiArray
 from rclpy.node import Node
 from rclpy.action import ActionClient
 from rclpy.callback_groups import ReentrantCallbackGroup
@@ -88,6 +89,9 @@ class BenchmarkSession(Node):
 
         self._people_sub = self.create_subscription(
             People, self.people_topic, self._on_people, 10, callback_group=cbg)
+        self._robot_forces_sub = self.create_subscription(
+            Float32MultiArray, 'human_robot_forces', self._on_robot_forces, 10,
+            callback_group=cbg)
 
         self._initpose_pub = self.create_publisher(
             PoseWithCovarianceStamped, "/initialpose", 10)
@@ -122,6 +126,8 @@ class BenchmarkSession(Node):
         self._phase = "wait_nav2"
         self._phase_timer = self.create_timer(1.0, self._phase_tick, callback_group=cbg)
         self._last_reloc_method = "none"
+        self._tf_warn_count = 0
+        self._people_seen_samples = 0
 
     # ── episode-local state ─────────────────────────────────────────
     def _reset_episode_state(self):
@@ -135,6 +141,10 @@ class BenchmarkSession(Node):
         self._episode_start            = None
         self._nav_result               = None
         self._goal_handle              = None
+        self._tf_warn_count            = 0
+        self._people_seen_samples      = 0
+        self._current_robot_forces:    list  = []  # latest [|F_robot|, ...] per agent
+        self._robot_force_samples:     list  = []  # mean |F_robot| per sample tick
         for attr in ("_sample_timer", "_timeout_timer"):
             t = getattr(self, attr, None)
             if t is not None:
@@ -176,11 +186,15 @@ class BenchmarkSession(Node):
             return
 
         ep = self._episodes[self._episode_idx]
+        print(
+            f"\n  ▶ Episode {self._episode_idx + 1}/{len(self._episodes)}: "
+            f"[{ep.get('episode_id', '')}]  "
+            f"start=({ep['start']['x']:.2f}, {ep['start']['y']:.2f}) → "
+            f"goal=({ep['goal']['x']:.2f}, {ep['goal']['y']:.2f})",
+            flush=True)
         self.get_logger().info(
-            f"\n── Episode {self._episode_idx + 1}/{len(self._episodes)} "
-            f"[{ep.get('episode_id', '')}] ──\n"
-            f"  start=({ep['start']['x']:.2f}, {ep['start']['y']:.2f})  "
-            f"goal=({ep['goal']['x']:.2f}, {ep['goal']['y']:.2f})")
+            f"── Episode {self._episode_idx + 1}/{len(self._episodes)} "
+            f"[{ep.get('episode_id', '')}] ──")
 
         self._reset_episode_state()
         self._phase = "teleporting"
@@ -325,6 +339,7 @@ class BenchmarkSession(Node):
 
         self._episode_start    = self.get_clock().now()
         self._last_sample_time = self._episode_start
+        self._positions.append((0.0, float(ep["start"]["x"]), float(ep["start"]["y"])))
 
         self._sample_timer = self.create_timer(
             1.0 / self.sample_rate, self._sample, callback_group=self._cbg)
@@ -365,6 +380,15 @@ class BenchmarkSession(Node):
     # ── metric sampling ──────────────────────────────────────────────
     def _on_people(self, msg):
         self._people = [(p.position.x, p.position.y) for p in msg.people]
+        if self._people:
+            self._people_seen_samples += 1
+
+    def _on_robot_forces(self, msg):
+        # msg.data = [fx0, fy0, fx1, fy1, ...] per agent, same order as /people topic.
+        self._current_robot_forces = [
+            math.hypot(msg.data[i], msg.data[i + 1])
+            for i in range(0, len(msg.data) - 1, 2)
+        ]
 
     def _sample(self):
         if self._episode_start is None:
@@ -373,11 +397,8 @@ class BenchmarkSession(Node):
         dt = (now - self._last_sample_time).nanoseconds * 1e-9
         self._last_sample_time = now
 
-        try:
-            tf = self._tf_buf.lookup_transform(
-                self.global_frame, self.robot_frame, rclpy.time.Time())
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
-                tf2_ros.ExtrapolationException):
+        tf = self._lookup_robot_tf()
+        if tf is None:
             return
 
         rx = tf.transform.translation.x
@@ -402,6 +423,19 @@ class BenchmarkSession(Node):
         if min_d < self.personal_space:
             self._viol_time += dt
 
+        # Average robot influence only over agents within sensor range of the robot.
+        # /human_robot_forces and /people are published in the same agent order.
+        if self._current_robot_forces and self._people:
+            sensor_range = 3.5  # TurtleBot3 lidar range, metres
+            nearby = [
+                self._current_robot_forces[i]
+                for i, (px, py) in enumerate(self._people)
+                if i < len(self._current_robot_forces)
+                and math.hypot(rx - px, ry - py) < sensor_range
+            ]
+            if nearby:
+                self._robot_force_samples.append(sum(nearby) / len(nearby))
+
     # ── save & advance ───────────────────────────────────────────────
     def _end_episode(self):
         for attr in ("_sample_timer", "_timeout_timer"):
@@ -412,6 +446,21 @@ class BenchmarkSession(Node):
 
         ep = self._episodes[self._episode_idx]
 
+        # Try one final TF sample at episode end so metrics do not collapse to
+        # zero when intermediate timer callbacks were starved or TF was late.
+        if self._episode_start is not None:
+            tf = self._lookup_robot_tf()
+            if tf is not None:
+                now = self.get_clock().now()
+                sim_t = (now - self._episode_start).nanoseconds * 1e-9
+                rx = tf.transform.translation.x
+                ry = tf.transform.translation.y
+                if not self._positions or (rx, ry) != (self._positions[-1][1], self._positions[-1][2]):
+                    self._positions.append((sim_t, rx, ry))
+                if self._people:
+                    min_d = min(math.hypot(rx - px, ry - py) for px, py in self._people)
+                    self._min_dists.append(min_d)
+
         total_time  = 0.0
         path_length = 0.0
         if self._positions:
@@ -421,7 +470,8 @@ class BenchmarkSession(Node):
                 dy = self._positions[i][2] - self._positions[i - 1][2]
                 path_length += math.hypot(dx, dy)
 
-        min_dist = min(self._min_dists) if self._min_dists else float("inf")
+        finite_min_dists = [d for d in self._min_dists if math.isfinite(d)]
+        min_dist = min(finite_min_dists) if finite_min_dists else float("nan")
 
         result = {
             "episode_id":      ep.get("episode_id", f"ep{self._episode_idx}"),
@@ -435,9 +485,29 @@ class BenchmarkSession(Node):
             "collision_count": self._collision_events,
             "viol_time":       round(self._viol_time, 3),
             "samples":         len(self._positions),
+            "people_seen_samples": self._people_seen_samples,
+            # Mean force on nearby agents only (|F| > threshold); nan if nobody was near.
+            "avg_robot_influence": round(
+                sum(self._robot_force_samples) / len(self._robot_force_samples), 4)
+                if self._robot_force_samples else float("nan"),
             "goal":            ep["goal"],
             "start":           ep["start"],
         }
+
+        # Print results directly to stdout for immediate visibility
+        robot_infl = result['avg_robot_influence']
+        infl_str = f"{robot_infl:.3f}" if math.isfinite(robot_infl) else "n/a"
+        result_line = (
+            f"[Episode {self._episode_idx}/{len(self._episodes)}]  "
+            f"✓ {result['status']}  "
+            f"t={result['time_to_goal']:.1f}s  "
+            f"path={result['path_length']:.2f}m  "
+            f"minD={result['min_dist']:.3f}m  "
+            f"coll={result['collision_count']}  "
+            f"viol={result['viol_time']:.1f}s  "
+            f"rob_infl={infl_str}"
+        )
+        print(f"  {result_line}", flush=True)
 
         self.get_logger().info(
             f"  ✓ {result['status']}  "
@@ -445,7 +515,9 @@ class BenchmarkSession(Node):
             f"path={result['path_length']:.2f}m  "
             f"minD={result['min_dist']:.3f}m  "
             f"coll={result['collision_count']}  "
-            f"viol={result['viol_time']:.1f}s")
+            f"viol={result['viol_time']:.1f}s  "
+            f"people_seen={result['people_seen_samples']}  "
+            f"rob_infl={infl_str}")
 
         ep_file = os.path.join(self.output_dir, f"{result['episode_id']}.json")
         with open(ep_file, "w") as f:
@@ -475,6 +547,28 @@ class BenchmarkSession(Node):
         self.get_logger().info(
             f"Session complete – {len(self._all_results)} episodes saved to {self.output_dir}")
         raise SystemExit(0)
+
+    def _lookup_robot_tf(self):
+        frames = [self.robot_frame]
+        if self.robot_frame != "base_footprint":
+            frames.append("base_footprint")
+        if self.robot_frame != "base_link":
+            frames.append("base_link")
+
+        last_exc = None
+        for frame in frames:
+            try:
+                return self._tf_buf.lookup_transform(
+                    self.global_frame, frame, rclpy.time.Time())
+            except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+                    tf2_ros.ExtrapolationException) as exc:
+                last_exc = exc
+
+        self._tf_warn_count += 1
+        if self._tf_warn_count <= 5:
+            self.get_logger().warn(
+                f"TF lookup failed for {frames}: {last_exc}")
+        return None
 
 
 def main(args=None):

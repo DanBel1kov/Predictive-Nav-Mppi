@@ -5,14 +5,10 @@
   <BehaviorTree ID="DefaultTree">
     <Fallback name="MainFallback">
       <Sequence name="SetGoals">
-        <RunOnce>
-          <SetGoal agent_id="{id}" goal_id="7"/>
-        </RunOnce>
-        <Inverter>
-          <RunOnce>
-            <SetGoal agent_id="{id}" goal_id="8"/>
-          </RunOnce>
-        </Inverter>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="19"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="20"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="17"/></RunOnce>
+      <Inverter><RunOnce><SetGoal agent_id="{id}" goal_id="18"/></RunOnce></Inverter>
       </Sequence>
       <Sequence name="RegularNavigation">
         <Inverter>

@@ -16,11 +16,14 @@ class ComputeAgentsProxy(Node):
         self.declare_parameter('backend_service', 'compute_agents_raw')
         self.declare_parameter('frontend_service', 'compute_agents')
         self.declare_parameter('robot_mask_distance', 10000.0)
+        self.declare_parameter('robot_force_scale', 0.0)
 
         backend_service = self.get_parameter('backend_service').value
         frontend_service = self.get_parameter('frontend_service').value
         self._robot_mask_distance = float(
             self.get_parameter('robot_mask_distance').value)
+        self._robot_force_scale = float(
+            self.get_parameter('robot_force_scale').value)
 
         self._cb_group = ReentrantCallbackGroup()
 
@@ -31,7 +34,8 @@ class ComputeAgentsProxy(Node):
             callback_group=self._cb_group)
 
         self.get_logger().info(
-            f'ComputeAgents proxy started: {frontend_service} -> {backend_service}')
+            f'ComputeAgents proxy started: {frontend_service} -> {backend_service}, '
+            f'robot_force_scale={self._robot_force_scale:.2f}')
 
     def _mask_robot(self, request: ComputeAgents.Request) -> ComputeAgents.Request:
         proxied = ComputeAgents.Request()
@@ -57,7 +61,12 @@ class ComputeAgentsProxy(Node):
             response.updated_agents = request.current_agents
             return response
 
-        proxied_request = self._mask_robot(request)
+        if self._robot_force_scale <= 0.0:
+            # Robot invisible: move far away so SFM ignores it
+            proxied_request = self._mask_robot(request)
+        else:
+            # Robot visible: pass real position; agent_manager scales the force
+            proxied_request = copy.deepcopy(request)
         try:
             # With MultiThreadedExecutor + Reentrant callback group this call is stable
             # and preserves HuNav's normal human-human interaction dynamics.

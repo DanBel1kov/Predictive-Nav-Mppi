@@ -31,7 +31,7 @@ hunav_loader:
       init_pose:
         x: 2.0
         y: 0.0
-        z: -1.0
+        z: 0.0
         h: 0.0
       behavior:
         type: Regular
@@ -54,7 +54,7 @@ hunav_loader:
       init_pose:
         x: 0.0
         y: 2.0
-        z: -1.0
+        z: 0.0
         h: -1.57
       behavior:
         type: Regular

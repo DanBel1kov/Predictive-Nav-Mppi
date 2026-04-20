@@ -28,6 +28,13 @@ setup(
             'run_benchmark = predictive_nav_mppi.run_benchmark:main',
             'record_people_dataset = predictive_nav_mppi.record_people_dataset:main',
             'benchmark_people_predictors = predictive_nav_mppi.benchmark_people_predictors:main',
+            'curate_people_dataset = predictive_nav_mppi.curate_people_dataset:main',
+            'run_curated_benchmark_suite = predictive_nav_mppi.run_curated_benchmark_suite:main',
+            'train_residual_predictor = predictive_nav_mppi.train_residual_predictor:main',
+            'inspect_scene_patch = predictive_nav_mppi.inspect_scene_patch:main',
+            'reset_hunav_agents = predictive_nav_mppi.reset_hunav_agents:main',
+            'parallel_benchmark = predictive_nav_mppi.parallel_benchmark_runner:main',
+            'run_paired_benchmark = predictive_nav_mppi.run_paired_benchmark:main',
         ],
     },
 )

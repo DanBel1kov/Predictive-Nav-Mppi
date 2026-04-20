@@ -1,11 +1,18 @@
 benchmark:
   scenario: long_corridor
 
-  # "custom" = твой MPPI (nav2_controllers::MppiNav2Controller) + сэмплы траекторий в RViz + предсказания людей
-  # "standard" = стандартный Nav2 MPPI (nav2_mppi_controller), без твоих критиков по людям
-  mppi_mode: custom
-  # People predictor: "kalman" (CV filter), "model" (Social GRU) or "social_vae"
-  predictor_type: social_vae
+  # "custom" = твой MPPI + предсказания людей
+  # "standard" = стандартный Nav2 MPPI, без критиков по людям
+  mppi_mode: standard
+  # People predictor: "kalman" (CV filter), "model" (Social GRU), "social_vae" or "residual"
+  predictor_type: kalman
+  residual_model_weights: /home/danbel1kov/predictive-nav-mppi/models/residual_predictor/best_residual_model.pt
+  residual_alpha: 0.3
+  residual_smoothing_beta: 0.8
+  residual_clip_norm: 0.35
+  residual_turn_gate_enable: true
+  residual_turn_gate_tau: 0.1
+  residual_turn_gate_alpha: 30.0
   # SocialVAE paths
   social_vae_repo_path: "/home/danbel1kov/SocialVAE"
   social_vae_ckpt_path: "/home/danbel1kov/predictive-nav-mppi/src/predictive_nav_mppi/predictive_nav_mppi/models/vae_hotel"
@@ -13,12 +20,22 @@ benchmark:
   social_vae_pred_samples: 20
   robot_model_name: waffle
   repeats: 1
+  robot_force_scale: 0.0   # 0.0 = люди игнорируют робота, 1.0 = полная реакция как на человека
+  predict_robot_as_agent: false  # true = робот передаётся предиктору как сосед-пешеход
+  reset_hunav_between_episodes: true
+  reset_hunav_attempts: 3
+  reset_hunav_retry_sleep_sec: 2.0
 
   gui: false
+  sim_speedup: 2.5
+  sim_max_step_size: 0.005
+  # 0 = Gazebo Classic runs as fast as the CPU allows. With max_step_size=0.005,
+  # update_rate=200 caps the simulation at 1.0x real time.
+  sim_real_time_update_rate: 0.0
   startup_delay_sec: 15.0
   nav_timeout_sec: 180.0
   settle_time_sec: 5.0
-  sample_rate_hz: 10.0
+  sample_rate_hz: 5.0
   cooldown_sec: 8.0
 
   robot_radius: 0.22
@@ -35,10 +52,8 @@ benchmark:
     yaw: 0.0
 
   # long_corridor: 20m x 6.6m, x∈[-10,10], y∈[-3.3,3.25], центральный |y|<1.8
-  # Длинные маршруты по карте; 2 старта не из центрального коридора; 2 финиша не в центральном
   goals:
-    # Длинные по центральному коридору (старт не из центра карты)
-    - start: { x: -8.5,  y: 0.4,  yaw: 0.0 }
+    - start: { x: -8.5,  y:  0.4, yaw: 0.0 }
       x:  8.5
       y:  0.4
       yaw: 0.0
@@ -46,7 +61,7 @@ benchmark:
       x: -8.5
       y: -0.4
       yaw: 3.14159
-    - start: { x: -8.0,  y: 0.0,  yaw: 0.0 }
+    - start: { x: -8.0,  y:  0.0, yaw: 0.0 }
       x:  8.0
       y: -0.3
       yaw: 0.0
@@ -54,8 +69,7 @@ benchmark:
       x: -8.0
       y:  0.3
       yaw: 3.14159
-    # Старт НЕ из центрального коридора (боковые)
-    - start: { x: -8.5,  y: 2.5,  yaw: 0.0 }
+    - start: { x: -8.5,  y:  2.5, yaw: 0.0 }
       x:  8.5
       y:  0.0
       yaw: 0.0
@@ -63,17 +77,15 @@ benchmark:
       x: -8.5
       y:  0.0
       yaw: 3.14159
-    # Финиш НЕ в центральном коридоре (боковые)
-    - start: { x: -8.5,  y: 0.0,  yaw: 0.0 }
+    - start: { x: -8.5,  y:  0.0, yaw: 0.0 }
       x:  8.5
       y:  2.5
       yaw: 0.0
-    - start: { x:  8.5,  y: 0.0,  yaw: 3.14159 }
+    - start: { x:  8.5,  y:  0.0, yaw: 3.14159 }
       x: -8.5
       y: -2.5
       yaw: 3.14159
-    # Ещё длинные маршруты
-    - start: { x: -7.5,  y: 0.2,  yaw: 0.0 }
+    - start: { x: -7.5,  y:  0.2, yaw: 0.0 }
       x:  7.5
       y: -0.2
       yaw: 0.0

@@ -1,0 +1,92 @@
+diff --git a/hunav_agent_manager/include/hunav_agent_manager/agent_manager.hpp b/hunav_agent_manager/include/hunav_agent_manager/agent_manager.hpp
+index 124d9d2..da5e1c1 100644
+--- a/hunav_agent_manager/include/hunav_agent_manager/agent_manager.hpp
++++ b/hunav_agent_manager/include/hunav_agent_manager/agent_manager.hpp
+@@ -88,6 +88,7 @@ public:
+    * @param msg
+    */
+   void updateAllAgents(const hunav_msgs::msg::Agent::SharedPtr robot_msg, const hunav_msgs::msg::Agents::SharedPtr msg);
++  void resetAllAgents(const hunav_msgs::msg::Agent::SharedPtr robot_msg, const hunav_msgs::msg::Agents::SharedPtr msg);
+   /**
+    * @brief method to update the agents
+    *
+diff --git a/hunav_agent_manager/include/hunav_agent_manager/bt_functions.hpp b/hunav_agent_manager/include/hunav_agent_manager/bt_functions.hpp
+index 7e86722..3faf476 100644
+--- a/hunav_agent_manager/include/hunav_agent_manager/bt_functions.hpp
++++ b/hunav_agent_manager/include/hunav_agent_manager/bt_functions.hpp
+@@ -68,6 +68,11 @@ public:
+     agent_manager_.updateAllAgents(robot, msg);
+   }
+ 
++  void resetAllAgents(const hunav_msgs::msg::Agent::SharedPtr robot,
++                      const hunav_msgs::msg::Agents::SharedPtr msg) {
++    agent_manager_.resetAllAgents(robot, msg);
++  }
++
+   void updateAgentsAndRobot(const hunav_msgs::msg::Agents::SharedPtr msg) {
+     agent_manager_.updateAgentsAndRobot(msg);
+   }
+diff --git a/hunav_agent_manager/src/agent_manager.cpp b/hunav_agent_manager/src/agent_manager.cpp
+index b486665..31c6138 100644
+--- a/hunav_agent_manager/src/agent_manager.cpp
++++ b/hunav_agent_manager/src/agent_manager.cpp
+@@ -29,6 +29,10 @@ void AgentManager::init()
+   step_count = 1;
+   step_count2 = 1;
+   move = false;
++  agents_.clear();
++  override_goals_data_.clear();
++  orig_desired_vels_.clear();
++  last_interaction_time_.clear();
+   // max_dist_view_squared_ = max_dist_view_ * max_dist_view_;
+   //printf("[AgentManager.init] initialized \n");
+ }
+@@ -1519,6 +1523,20 @@ void AgentManager::updateAllAgents(const hunav_msgs::msg::Agent::SharedPtr robot
+   computeForces();
+ }
+ 
++void AgentManager::resetAllAgents(const hunav_msgs::msg::Agent::SharedPtr robot_msg,
++                                  const hunav_msgs::msg::Agents::SharedPtr agents_msg)
++{
++  std::lock_guard<std::mutex> guard(mutex_);
++
++  init();
++  header_ = agents_msg->header;
++  initializeRobot(robot_msg);
++  initializeAgents(agents_msg);
++  agents_received_ = true;
++  robot_received_ = true;
++  computeForces();
++}
++
+ void AgentManager::updateAgentsAndRobot(const hunav_msgs::msg::Agents::SharedPtr agents_msg)
+ {
+   std::lock_guard<std::mutex> guard(mutex_);
+diff --git a/hunav_agent_manager/src/bt_node.cpp b/hunav_agent_manager/src/bt_node.cpp
+index 03b524d..e5e29f0 100644
+--- a/hunav_agent_manager/src/bt_node.cpp
++++ b/hunav_agent_manager/src/bt_node.cpp
+@@ -471,9 +471,20 @@ namespace hunav
+     auto ro = std::make_shared<hunav_msgs::msg::Agent>(request->robot);
+     auto ag = std::make_shared<hunav_msgs::msg::Agents>(request->current_agents);
+ 
+-    // Update the internal agent states with the
+-    // received data from the simulator
+-    btfunc_.updateAllAgents(ro, ag);
++    RCLCPP_INFO(this->get_logger(), "Resetting agents and rebuilding behavior trees");
++
++    initialized_ = false;
++    trees_.clear();
++    publisher_.reset();
++
++    // Reinitialize the full SFM/BT state from the provided initial agents.
++    // This restores each agent's initial goal queue instead of only updating
++    // positions and velocities.
++    btfunc_.resetAllAgents(ro, ag);
++    initializeBehaviorTrees(request->current_agents);
++    prev_time_ = rclcpp::Time(ag->header.stamp);
++    initialized_ = true;
++
+     response->ok = true;
+   }
+ 

@@ -3,24 +3,17 @@
   <include path="BTRegularNav.xml" />
 
   <BehaviorTree ID="DefaultTree">
-    <Fallback name="MainFallback">
-      <Sequence name="SetGoals">
-        <RunOnce>
-          <SetGoal agent_id="{id}" goal_id="3"/>
-        </RunOnce>
-        <Inverter>
-          <RunOnce>
-            <SetGoal agent_id="{id}" goal_id="4"/>
-          </RunOnce>
-        </Inverter>
-      </Sequence>
-      <Sequence name="RegularNavigation">
-        <Inverter>
-          <IsGoalReached agent_id="{id}"/>
-        </Inverter>
-        <RegularNav agent_id="{id}" time_step="{dt}"/>
-      </Sequence>
-      <UpdateGoal agent_id="{id}"/>
-    </Fallback>
+<Sequence name="Agent14GroupEvent">
+  <GoTo agent_id="{id}" time_step="{dt}" goal_id="38" tolerance="0.20"/>
+  <StopAndWaitTimerAction agent_id="{id}" wait_duration="2.9"/>
+  <LookAtAgent observer_id="{id}" target_id="13"/>
+  <IsLookingAtMe agent_id="{id}" time_step="{dt}" target_id="13" distance_threshold="3.0" angle_threshold="0.6" duration="1.0"/>
+  <ConversationFormation main_agent_id="13" non_main_agent_ids="14" goal_id="38" conversation_duration="3.0" time_step="{dt}"/>
+  <SaySomething agent_id="{id}" message="ok"/>
+  <FollowAgent agent_id="{id}" time_step="{dt}" target_agent_id="13" duration="7.0"/>
+  <GoTo agent_id="{id}" time_step="{dt}" goal_id="37" tolerance="0.20"/>
+  <GoTo agent_id="{id}" time_step="{dt}" goal_id="40" tolerance="0.20"/>
+  <GoTo agent_id="{id}" time_step="{dt}" goal_id="4" tolerance="0.20"/>
+</Sequence>
   </BehaviorTree>
 </root>

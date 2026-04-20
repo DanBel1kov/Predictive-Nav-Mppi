@@ -3,25 +3,12 @@
   <include path="BTRegularNav.xml" />
 
   <BehaviorTree ID="DefaultTree">
-    <Fallback name="MainFallback">
-      <Sequence name="SetGoals">
-        <RunOnce>
-          <SetGoal agent_id="{id}" goal_id="3"/>
-        </RunOnce>
-        <Inverter>
-          <RunOnce>
-            <SetGoal agent_id="{id}" goal_id="1"/>
-          </RunOnce>
-        </Inverter>
-      </Sequence>
-      <Sequence name="RegularNavigation">
-        <Inverter>
-          <IsGoalReached agent_id="{id}"/>
-        </Inverter>
-        <RegularNav agent_id="{id}" time_step="{dt}"/>
-      </Sequence>
-      <UpdateGoal agent_id="{id}"/>
-    </Fallback>
+<Sequence name="Agent9StopLookGo">
+  <GoTo agent_id="{id}" time_step="{dt}" goal_id="32" tolerance="0.20"/>
+  <StopAndWaitTimerAction agent_id="{id}" wait_duration="2.4"/>
+  <LookAtPoint agent_id="{id}" goal_id="33"/>
+  <GoTo agent_id="{id}" time_step="{dt}" goal_id="33" tolerance="0.20"/>
+  <GoTo agent_id="{id}" time_step="{dt}" goal_id="39" tolerance="0.20"/>
+</Sequence>
   </BehaviorTree>
 </root>
-

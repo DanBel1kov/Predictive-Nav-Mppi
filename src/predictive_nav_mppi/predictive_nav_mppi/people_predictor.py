@@ -10,9 +10,10 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 import rclpy
+import tf2_ros
 from builtin_interfaces.msg import Duration
 from geometry_msgs.msg import Point
-from people_msgs.msg import People
+from people_msgs.msg import People, Person
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2, PointField
 from std_msgs.msg import Header
@@ -25,6 +26,10 @@ from predictive_nav_mppi.kf_cv import (
     prune_stale_tracks,
     update_state_cov,
 )
+from predictive_nav_mppi.models.kalman_residual_net import compute_turn_gate
+from predictive_nav_mppi.models.kalman_residual_net import load_checkpoint as load_residual_checkpoint
+from predictive_nav_mppi.models.kalman_residual_net import predict_residual_world
+from predictive_nav_mppi.scene_context import ScenePatchConfig
 
 # (mu, sigma or None) per step; sigma is 4x4 or None for model backend
 HorizonStep = Tuple[List[float], Optional[List[List[float]]]]
@@ -88,6 +93,9 @@ class _KalmanBackend:
         if hasattr(person, "person_id"):
             return int(getattr(person, "person_id"))
         name = str(getattr(person, "name", "")) or f"anon_{self.next_track_id}"
+        # Robot injected by predict_robot_as_agent gets name "robot_0" → fixed ID 0.
+        if name.startswith("robot_0"):
+            return 0
         if name not in self.name_to_track_id:
             self.name_to_track_id[name] = self.next_track_id
             self.next_track_id += 1
@@ -163,6 +171,8 @@ class _ModelBackend:
         if hasattr(person, "person_id"):
             return int(getattr(person, "person_id"))
         name = str(getattr(person, "name", "")) or f"anon_{self.next_track_id}"
+        if name.startswith("robot_0"):
+            return 0
         if name not in self.name_to_track_id:
             self.name_to_track_id[name] = self.next_track_id
             self.next_track_id += 1
@@ -308,6 +318,8 @@ class _SocialVAEBackend:
         if hasattr(person, "person_id"):
             return int(getattr(person, "person_id"))
         name = str(getattr(person, "name", "")) or f"anon_{self.next_track_id}"
+        if name.startswith("robot_0"):
+            return 0
         if name not in self.name_to_track_id:
             self.name_to_track_id[name] = self.next_track_id
             self.next_track_id += 1
@@ -398,159 +410,188 @@ class _SocialVAEBackend:
                     out[i] = (1.0 - a) * xy[idx - 1] + a * xy[idx]
         return out
 
-    def _xy_to_state6(self, xy: np.ndarray, dt: float) -> np.ndarray:
-        out = np.zeros((xy.shape[0], 6), dtype=np.float32)
-        out[:, 0:2] = xy.astype(np.float32)
-        if xy.shape[0] < 2:
-            return out
-        vel = np.zeros_like(xy, dtype=np.float32)
-        vel[1:] = (xy[1:] - xy[:-1]) / max(1e-6, dt)
-        vel[0] = vel[1]
-        acc = np.zeros_like(xy, dtype=np.float32)
-        acc[1:] = (vel[1:] - vel[:-1]) / max(1e-6, dt)
-        acc[0] = acc[1]
-        out[:, 2:4] = vel
-        out[:, 4:6] = acc
+
+class _ResidualBackend:
+    def __init__(self, node: "PeoplePredictor") -> None:
+        self.node = node
+        self._kalman = _KalmanBackend(node)
+        self.tracks_xy: Dict[int, deque] = {}
+        self.tracks_velocity: Dict[int, Tuple[float, float]] = {}
+        self.name_to_track_id: Dict[str, int] = {}
+        self.next_track_id = 1
+        self.last_update_sec: Dict[int, float] = {}
+        self._smoothed_residual_world: Dict[int, np.ndarray] = {}
+        self._model = None
+        self._k_neighbors = 3
+        self._pred_len = 26
+        self._scene_patch_cfg = ScenePatchConfig(
+            size_m=float(self.node.scene_patch_size_m),
+            pixels=int(self.node.scene_patch_pixels),
+            align_to_heading=bool(self.node.scene_patch_align_to_heading),
+        )
+        self._load_model()
+
+    def _person_id(self, person: Any) -> int:
+        if hasattr(person, "id"):
+            return int(getattr(person, "id"))
+        if hasattr(person, "person_id"):
+            return int(getattr(person, "person_id"))
+        name = str(getattr(person, "name", "")) or f"anon_{self.next_track_id}"
+        if name.startswith("robot_0"):
+            return 0
+        if name not in self.name_to_track_id:
+            self.name_to_track_id[name] = self.next_track_id
+            self.next_track_id += 1
+        return self.name_to_track_id[name]
+
+    def _load_model(self) -> None:
+        path = self.node.residual_model_weights
+        if not path:
+            self.node.get_logger().warn("residual backend: residual_model_weights is empty, predictor will not run")
+            return
+        try:
+            self._model, cfg = load_residual_checkpoint(path, device=self.node.residual_model_device)
+            self._k_neighbors = int(cfg.get("k_neighbors", 3))
+            self._pred_len = int(cfg.get("pred_len", 26))
+            self.node.get_logger().info(
+                f"Loaded residual model from {path} "
+                f"(obs_len={cfg.get('obs_len')}, pred_len={self._pred_len}, k_neighbors={self._k_neighbors})"
+            )
+        except Exception as e:
+            self.node.get_logger().error(f"Failed to load residual model from {path}: {e}")
+            self._model = None
+
+    def update(self, msg: People, now_sec: float) -> None:
+        self._kalman.update(msg, now_sec)
+        n = min(len(msg.people), max(0, self.node.max_people))
+        for i in range(n):
+            p = msg.people[i]
+            pid = self._person_id(p)
+            px = _float_or_default(p.position.x, 0.0)
+            py = _float_or_default(p.position.y, 0.0)
+            vx = _float_or_default(getattr(p, "velocity", None) and getattr(p.velocity, "x", None), 0.0)
+            vy = _float_or_default(getattr(p, "velocity", None) and getattr(p.velocity, "y", None), 0.0)
+            if pid not in self.tracks_xy:
+                self.tracks_xy[pid] = deque(maxlen=64)
+            self.tracks_xy[pid].append((now_sec, px, py))
+            self.tracks_velocity[pid] = (vx, vy)
+            self.last_update_sec[pid] = now_sec
+        timeout = self.node.track_timeout
+        stale = [pid for pid, t in self.last_update_sec.items() if now_sec - t > timeout]
+        for pid in stale:
+            self.tracks_xy.pop(pid, None)
+            self.tracks_velocity.pop(pid, None)
+            self.last_update_sec.pop(pid, None)
+            self._smoothed_residual_world.pop(pid, None)
+
+    def _sample_obs_at_dt(self, history: deque, obs_len: int, obs_dt: float, now_sec: float) -> Optional[np.ndarray]:
+        if len(history) < 1:
+            return None
+        times = np.array([h[0] for h in history], dtype=np.float64)
+        xy = np.array([[h[1], h[2]] for h in history], dtype=np.float64)
+        t_end = min(now_sec, float(times[-1]))
+        target_t = np.array([t_end - (obs_len - 1 - i) * obs_dt for i in range(obs_len)], dtype=np.float64)
+        out = np.zeros((obs_len, 2), dtype=np.float64)
+        for i, t in enumerate(target_t):
+            if t > times[-1]:
+                out[i] = xy[-1]
+            elif t < times[0]:
+                out[i] = xy[0]
+            else:
+                idx = np.searchsorted(times, t, side="left")
+                if idx == 0:
+                    out[i] = xy[0]
+                elif idx >= len(times):
+                    out[i] = xy[-1]
+                else:
+                    a = (t - times[idx - 1]) / max(1e-9, times[idx] - times[idx - 1])
+                    out[i] = (1.0 - a) * xy[idx - 1] + a * xy[idx]
         return out
 
     def get_horizons(self, now_sec: float) -> Dict[int, List[HorizonStep]]:
         if self._model is None:
             return {}
-
-        obs_len = max(2, int(self.node.social_vae_ob_horizon))
-        obs_dt = max(1e-6, float(self.node.social_vae_obs_dt))
+        kalman_horizons = self._kalman.get_horizons(now_sec)
+        obs_len = self.node.model_obs_len
+        obs_dt = max(1e-6, getattr(self.node, "model_obs_dt", 0.4))
         timeout = self.node.track_timeout
-
         tracks_obs: Dict[int, np.ndarray] = {}
         for pid, q in list(self.tracks_xy.items()):
             if now_sec - self.last_update_sec.get(pid, 0.0) > timeout:
                 continue
             arr = self._sample_obs_at_dt(q, obs_len, obs_dt, now_sec)
-            if arr is None:
-                continue
-            tracks_obs[pid] = arr
-        if not tracks_obs:
-            return {}
-
-        pids = list(tracks_obs.keys())
-        n_targets = len(pids)
-        x_np = np.zeros((obs_len, n_targets, 6), dtype=np.float32)
-        features: Dict[int, np.ndarray] = {}
-        for idx, pid in enumerate(pids):
-            feat = self._xy_to_state6(tracks_obs[pid], obs_dt)
-            features[pid] = feat
-            x_np[:, idx, :] = feat
-
-        max_neighbors = max(1, int(self.node.social_vae_max_neighbors))
-        ob_radius = max(1e-6, float(self.node.social_vae_ob_radius))
-        neighbor_pad = float(self.node.social_vae_neighbor_pad)
-        neigh_np = np.full((obs_len, n_targets, max_neighbors, 6), neighbor_pad, dtype=np.float32)
-
-        for i, pid in enumerate(pids):
-            target_last = tracks_obs[pid][-1]
-            candidate_neighbors: List[Tuple[float, np.ndarray]] = []
-            for other_pid in pids:
-                if other_pid == pid:
-                    continue
-                other_last = tracks_obs[other_pid][-1]
-                dist = float(np.linalg.norm(other_last - target_last))
-                if dist <= ob_radius:
-                    candidate_neighbors.append((dist, features[other_pid]))
-            candidate_neighbors.sort(key=lambda item: item[0])
-            for j, (_, feat) in enumerate(candidate_neighbors[:max_neighbors]):
-                neigh_np[:, i, j, :] = feat
-
-        try:
-            from predictive_nav_mppi.models.social_vae import predict_social_vae_samples
-
-            samples = predict_social_vae_samples(
-                model=self._model,
-                x=x_np,
-                neighbor=neigh_np,
-                device=self.node.social_vae_device,
-                n_predictions=self.node.social_vae_pred_samples,
-                expected_horizon=self.node.social_vae_pred_horizon,
-            )
-        except Exception as e:
-            self.node.get_logger().warn(f"SocialVAE inference failed: {e}")
-            return {}
-
-        target_steps = min(
-            max(1, int(self.node.social_vae_pred_steps_use)),
-            int(self.node.pred_steps),
-        )
-        available_steps = int(samples.shape[1])
-        steps_use = min(target_steps, available_steps)
-        std_floor = max(1e-4, float(self.node.social_vae_cov_std_floor))
-        var_floor = std_floor * std_floor
-
+            if arr is not None:
+                tracks_obs[pid] = arr
         out: Dict[int, List[HorizonStep]] = {}
-        for idx, pid in enumerate(pids):
-            agent_samples = samples[:, :steps_use, idx, :]
+        pids = list(tracks_obs.keys())
+        for pid in pids:
+            kalman_h = kalman_horizons.get(pid)
+            if not kalman_h:
+                continue
+            kalman_pred_xy = np.asarray([[step[0][0], step[0][1]] for step in kalman_h[: self._pred_len]], dtype=np.float32)
+            if kalman_pred_xy.shape[0] < self._pred_len:
+                continue
+            neigh_xy = [tracks_obs[oid] for oid in pids if oid != pid]
+            try:
+                pred_world = predict_residual_world(
+                    model=self._model,
+                    obs_xy=tracks_obs[pid].astype(np.float32),
+                    neigh_xy=[n.astype(np.float32) for n in neigh_xy],
+                    kalman_pred_xy=kalman_pred_xy,
+                    obs_dt=obs_dt,
+                    device=self.node.residual_model_device,
+                    k_neighbors=self._k_neighbors,
+                    scene_patch_cfg=self._scene_patch_cfg,
+                    scene_map_yaml=self.node.scene_map_yaml,
+                    residual_alpha=self._effective_residual_alpha(tracks_obs[pid]),
+                )
+            except Exception as e:
+                self.node.get_logger().warn(f"Residual inference failed: {e}")
+                continue
+            pred_world = self._postprocess_prediction(pid, kalman_pred_xy, pred_world)
+            steps_use = min(int(self.node.pred_steps), pred_world.shape[0])
             horizon: List[HorizonStep] = []
-            prev_cov_xx: Optional[float] = None
-            prev_cov_yy: Optional[float] = None
             for k in range(steps_use):
-                pts = agent_samples[:, k, :]
-                mu_xy = pts.mean(axis=0)
-                if pts.shape[0] > 1:
-                    cov2 = np.cov(pts, rowvar=False, bias=False)
-                else:
-                    cov2 = np.eye(2, dtype=np.float64) * var_floor
-                if cov2.shape != (2, 2):
-                    cov2 = np.eye(2, dtype=np.float64) * var_floor
-                cov_xx = max(var_floor, float(cov2[0, 0]))
-                cov_yy = max(var_floor, float(cov2[1, 1]))
-                lim = math.sqrt(cov_xx * cov_yy)
-                cov_xy = float(np.clip(cov2[0, 1], -lim, lim))
-
-                # Kalman-like behavior: uncertainty should not shrink with horizon.
-                if prev_cov_xx is not None and prev_cov_yy is not None:
-                    cov_xx = max(cov_xx, prev_cov_xx + var_floor)
-                    cov_yy = max(cov_yy, prev_cov_yy + var_floor)
-                    lim = math.sqrt(cov_xx * cov_yy)
-                    cov_xy = float(np.clip(cov_xy, -lim, lim))
-                prev_cov_xx = cov_xx
-                prev_cov_yy = cov_yy
-
-                sigma4 = [
-                    [cov_xx, cov_xy, 0.0, 0.0],
-                    [cov_xy, cov_yy, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.0],
-                ]
-                horizon.append(([float(mu_xy[0]), float(mu_xy[1]), 0.0, 0.0], sigma4))
-
-            # If model horizon is shorter than planner horizon, extend with CV-style tail.
-            while len(horizon) < target_steps and horizon:
-                if len(horizon) >= 2:
-                    prev_mu = horizon[-2][0]
-                    last_mu = horizon[-1][0]
-                    vx = float(last_mu[0] - prev_mu[0])
-                    vy = float(last_mu[1] - prev_mu[1])
-                else:
-                    vx = 0.0
-                    vy = 0.0
-                x_next = float(horizon[-1][0][0] + vx)
-                y_next = float(horizon[-1][0][1] + vy)
-                last_sigma = horizon[-1][1]
-                if last_sigma is None:
-                    cov_xx = var_floor
-                    cov_xy = 0.0
-                    cov_yy = var_floor
-                else:
-                    cov_xx = float(last_sigma[0][0]) + var_floor
-                    cov_xy = float(last_sigma[0][1])
-                    cov_yy = float(last_sigma[1][1]) + var_floor
-                sigma4 = [
-                    [cov_xx, cov_xy, 0.0, 0.0],
-                    [cov_xy, cov_yy, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.0],
-                ]
-                horizon.append(([x_next, y_next, 0.0, 0.0], sigma4))
+                x, y = float(pred_world[k, 0]), float(pred_world[k, 1])
+                horizon.append(([x, y, 0.0, 0.0], None))
             out[pid] = horizon
         return out
+
+    def _effective_residual_alpha(self, obs_xy: np.ndarray) -> float:
+        alpha = float(max(0.0, self.node.residual_alpha))
+        if not getattr(self.node, "residual_turn_gate_enable", True):
+            return alpha
+        gate = compute_turn_gate(
+            obs_xy=obs_xy,
+            tau=float(self.node.residual_turn_gate_tau),
+            alpha=float(self.node.residual_turn_gate_alpha),
+        )
+        return alpha * gate
+
+    def _postprocess_prediction(
+        self,
+        pid: int,
+        kalman_pred_xy: np.ndarray,
+        pred_world: np.ndarray,
+    ) -> np.ndarray:
+        correction = np.asarray(pred_world, dtype=np.float32) - np.asarray(kalman_pred_xy, dtype=np.float32)
+
+        clip_norm = float(max(0.0, getattr(self.node, "residual_clip_norm", 0.0)))
+        if clip_norm > 0.0 and correction.size:
+            norms = np.linalg.norm(correction, axis=1, keepdims=True)
+            scale = np.minimum(1.0, clip_norm / np.maximum(norms, 1e-6))
+            correction = correction * scale
+
+        beta = float(min(0.999, max(0.0, getattr(self.node, "residual_smoothing_beta", 0.0))))
+        if beta > 0.0:
+            prev = self._smoothed_residual_world.get(pid)
+            if prev is not None and prev.shape == correction.shape:
+                correction = beta * prev + (1.0 - beta) * correction
+            self._smoothed_residual_world[pid] = correction.copy()
+        else:
+            self._smoothed_residual_world.pop(pid, None)
+
+        return np.asarray(kalman_pred_xy, dtype=np.float32) + correction
 
 
 # --- Unified node ---
@@ -573,7 +614,7 @@ class PeoplePredictor(Node):
         self.ellipse_steps = int(self.declare_parameter("ellipse_steps", 3).value)
         self.frame_id_override = str(self.declare_parameter("frame_id_override", "").value)
 
-        # Predictor type: "kalman" | "model"/"social_gru" | "social_vae"/"socialvae"
+        # Predictor type: "kalman" | "model"/"social_gru" | "social_vae"/"socialvae" | "residual"
         predictor_type_raw = str(self.declare_parameter("predictor_type", "kalman").value).lower().strip()
         type_aliases = {
             "kalman": "kalman",
@@ -581,6 +622,7 @@ class PeoplePredictor(Node):
             "social_gru": "model",
             "social_vae": "social_vae",
             "socialvae": "social_vae",
+            "residual": "residual",
         }
         self.predictor_type = type_aliases.get(predictor_type_raw, "")
         if not self.predictor_type:
@@ -611,6 +653,18 @@ class PeoplePredictor(Node):
         self.model_obs_dt = float(self.declare_parameter("model_obs_dt", 0.4).value)
         # Use only first N steps of model output — shorter, less "straight into the distance" predictions.
         self.model_pred_steps_use = int(self.declare_parameter("model_pred_steps_use", 5).value)
+        self.residual_model_weights = str(self.declare_parameter("residual_model_weights", "").value).strip()
+        self.residual_model_device = str(self.declare_parameter("residual_model_device", "").value).strip() or self.model_device
+        self.residual_alpha = float(self.declare_parameter("residual_alpha", 0.3).value)
+        self.residual_smoothing_beta = float(self.declare_parameter("residual_smoothing_beta", 0.8).value)
+        self.residual_clip_norm = float(self.declare_parameter("residual_clip_norm", 0.35).value)
+        self.residual_turn_gate_enable = bool(self.declare_parameter("residual_turn_gate_enable", True).value)
+        self.residual_turn_gate_tau = float(self.declare_parameter("residual_turn_gate_tau", 0.1).value)
+        self.residual_turn_gate_alpha = float(self.declare_parameter("residual_turn_gate_alpha", 30.0).value)
+        self.scene_map_yaml = str(self.declare_parameter("scene_map_yaml", "").value).strip()
+        self.scene_patch_size_m = float(self.declare_parameter("scene_patch_size_m", 6.0).value)
+        self.scene_patch_pixels = int(self.declare_parameter("scene_patch_pixels", 32).value)
+        self.scene_patch_align_to_heading = bool(self.declare_parameter("scene_patch_align_to_heading", True).value)
 
         # SocialVAE-only params
         self.social_vae_repo_path = str(self.declare_parameter("social_vae_repo_path", "").value).strip()
@@ -628,6 +682,24 @@ class PeoplePredictor(Node):
         self.social_vae_cov_std_floor = float(self.declare_parameter("social_vae_cov_std_floor", 0.08).value)
         self.social_vae_device = str(self.declare_parameter("social_vae_device", "").value).strip() or self.model_device
 
+        # Robot-as-agent injection
+        self.predict_robot_as_agent = bool(
+            self.declare_parameter("predict_robot_as_agent", False).value)
+        self.robot_frame = str(
+            self.declare_parameter("robot_frame", "base_footprint").value)
+        self.global_frame = str(
+            self.declare_parameter("global_frame", "map").value)
+        # Special fake person ID for the robot (excluded from output predictions).
+        self._ROBOT_FAKE_PID = 0
+        self._robot_prev_xy: Optional[Tuple[float, float]] = None
+        self._robot_prev_t: float = 0.0
+        if self.predict_robot_as_agent:
+            self._tf_buf = tf2_ros.Buffer()
+            self._tf_lis = tf2_ros.TransformListener(self._tf_buf, self)
+            self.get_logger().info(
+                f"predict_robot_as_agent=True: robot ({self.robot_frame}) "
+                "will be injected as agent 0 into predictor")
+
         self.latest_frame_id = "map"
         self._logged_frame_id = False
 
@@ -635,6 +707,8 @@ class PeoplePredictor(Node):
             self._backend = _KalmanBackend(self)
         elif self.predictor_type == "social_vae":
             self._backend = _SocialVAEBackend(self)
+        elif self.predictor_type == "residual":
+            self._backend = _ResidualBackend(self)
         else:
             self._backend = _ModelBackend(self)
 
@@ -659,6 +733,37 @@ class PeoplePredictor(Node):
     def _now_sec(self) -> float:
         return self.get_clock().now().nanoseconds * 1e-9
 
+    def _get_robot_person(self, now_sec: float) -> Optional[Person]:
+        """Look up robot TF and return it as a fake Person, or None on failure."""
+        try:
+            tf = self._tf_buf.lookup_transform(
+                self.global_frame, self.robot_frame, rclpy.time.Time())
+            rx = tf.transform.translation.x
+            ry = tf.transform.translation.y
+        except Exception:
+            return None
+
+        # Estimate velocity from position difference
+        dt = now_sec - self._robot_prev_t
+        if self._robot_prev_xy is not None and 0.01 < dt < 1.0:
+            vx = (rx - self._robot_prev_xy[0]) / dt
+            vy = (ry - self._robot_prev_xy[1]) / dt
+        else:
+            vx, vy = 0.0, 0.0
+        self._robot_prev_xy = (rx, ry)
+        self._robot_prev_t = now_sec
+
+        p = Person()
+        p.name = f"robot_{self._ROBOT_FAKE_PID}"
+        p.position.x = rx
+        p.position.y = ry
+        p.position.z = 0.0
+        p.velocity.x = vx
+        p.velocity.y = vy
+        p.velocity.z = 0.0
+        p.reliability = 1.0
+        return p
+
     def _people_cb(self, msg: People) -> None:
         if self.frame_id_override:
             self.latest_frame_id = self.frame_id_override
@@ -670,7 +775,18 @@ class PeoplePredictor(Node):
                 f"People/predictions frame_id: {self.latest_frame_id!r} "
                 "(set frame_id_override in config if RViz Fixed Frame differs)"
             )
-        self._backend.update(msg, self._now_sec())
+        now_sec = self._now_sec()
+        if self.predict_robot_as_agent:
+            robot_person = self._get_robot_person(now_sec)
+            if robot_person is not None:
+                # Inject robot as first person so backends treat it as a neighbour.
+                # Make a shallow copy to avoid mutating the original message.
+                from copy import copy
+                msg_with_robot = copy(msg)
+                msg_with_robot.people = [robot_person] + list(msg.people)
+                self._backend.update(msg_with_robot, now_sec)
+                return
+        self._backend.update(msg, now_sec)
 
     def _create_cloud_xyz32(self, header: Header, points_xyz: List[Tuple[float, float, float]]) -> PointCloud2:
         msg = PointCloud2()
@@ -780,6 +896,10 @@ class PeoplePredictor(Node):
         now = self.get_clock().now()
         now_sec = now.nanoseconds * 1e-9
         horizon_by_id = self._backend.get_horizons(now_sec)
+
+        # Exclude robot's fake track from published predictions.
+        if self.predict_robot_as_agent:
+            horizon_by_id.pop(self._ROBOT_FAKE_PID, None)
 
         points_xyz: List[Tuple[float, float, float]] = []
         for _, horizon in horizon_by_id.items():

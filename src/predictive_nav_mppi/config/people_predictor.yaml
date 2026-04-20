@@ -21,6 +21,13 @@ model_ellipse_std: 0.08
 # Макс. полуось эллипса (м) — ограничение визуализации и зоны cost
 max_ellipse_scale: 0.25
 
+# Robot-as-agent injection
+# If true, robot position (from TF) is added as an extra pedestrian in the predictor,
+# so models treat robot as a neighbour and predict people reactions to it.
+predict_robot_as_agent: false
+robot_frame: "base_footprint"
+global_frame: "map"
+
 # Common
 input_topic: "/people"
 output_cloud_topic: "/predicted_people_cloud"
@@ -37,6 +44,10 @@ ellipse_steps: 4
 frame_id_override: ""
 # Если предсказания идут «назад» — попробуйте true (модель обучена с другой осью «вперёд»)
 model_flip_forward_axis: false
+scene_map_yaml: ""
+scene_patch_size_m: 6.0
+scene_patch_pixels: 32
+scene_patch_align_to_heading: true
 
 # SocialVAE-specific (used when predictor_type=social_vae)
 # Path to cloned SocialVAE repo root (contains social_vae.py)

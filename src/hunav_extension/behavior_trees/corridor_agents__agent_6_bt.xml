@@ -3,25 +3,13 @@
   <include path="BTRegularNav.xml" />
 
   <BehaviorTree ID="DefaultTree">
-    <Fallback name="MainFallback">
-      <Sequence name="SetGoals">
-        <RunOnce>
-          <SetGoal agent_id="{id}" goal_id="16"/>
-        </RunOnce>
-        <Inverter>
-          <RunOnce>
-            <SetGoal agent_id="{id}" goal_id="15"/>
-          </RunOnce>
-        </Inverter>
-      </Sequence>
-      <Sequence name="RegularNavigation">
-        <Inverter>
-          <IsGoalReached agent_id="{id}"/>
-        </Inverter>
-        <RegularNav agent_id="{id}" time_step="{dt}"/>
-      </Sequence>
-      <UpdateGoal agent_id="{id}"/>
-    </Fallback>
+<Sequence name="Agent6Ambiguous">
+  <GoTo agent_id="{id}" time_step="{dt}" goal_id="26" tolerance="0.20"/>
+  <GoTo agent_id="{id}" time_step="{dt}" goal_id="34" tolerance="0.20"/>
+  <IsAtPosition agent_id="{id}" goal_id="34" tolerance="0.30"/>
+  <StopAndWaitTimerAction agent_id="{id}" wait_duration="3.3"/>
+  <GoTo agent_id="{id}" time_step="{dt}" goal_id="31" tolerance="0.20"/>
+  <GoTo agent_id="{id}" time_step="{dt}" goal_id="19" tolerance="0.20"/>
+</Sequence>
   </BehaviorTree>
 </root>
-

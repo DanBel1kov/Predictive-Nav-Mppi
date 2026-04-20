@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root main_tree_to_execute="DefaultTree" BTCPP_format="4">
+  <include path="BTRegularNav.xml" />
+
+  <BehaviorTree ID="DefaultTree">
+    <Fallback name="MainFallback">
+      <Sequence name="SetGoals">
+      <RunOnce><SetGoal agent_id="{id}" goal_id="17"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="16"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="15"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="14"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="13"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="12"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="11"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="10"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="9"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="8"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="7"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="6"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="5"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="4"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="3"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="2"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="1"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="2"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="3"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="4"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="5"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="6"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="7"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="8"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="9"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="10"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="11"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="12"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="13"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="14"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="15"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="16"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="17"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="18"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="19"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="20"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="21"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="22"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="23"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="24"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="25"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="26"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="27"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="28"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="29"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="30"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="31"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="32"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="33"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="34"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="35"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="34"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="33"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="32"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="31"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="30"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="29"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="28"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="27"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="26"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="25"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="24"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="23"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="22"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="21"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="20"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="19"/></RunOnce>
+      <RunOnce><SetGoal agent_id="{id}" goal_id="18"/></RunOnce>
+      <Inverter><RunOnce><SetGoal agent_id="{id}" goal_id="17"/></RunOnce></Inverter>
+      </Sequence>
+      <Sequence name="RegularNavigation">
+        <Inverter>
+          <IsGoalReached agent_id="{id}"/>
+        </Inverter>
+        <RegularNav agent_id="{id}" time_step="{dt}"/>
+      </Sequence>
+      <UpdateGoal agent_id="{id}"/>
+    </Fallback>
+  </BehaviorTree>
+</root>
