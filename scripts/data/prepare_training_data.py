@@ -267,7 +267,7 @@ def process_benchmark_file(input_path: Path, output_path: Path) -> None:
 
 def main():
     # Find all benchmark JSON files
-    base_path = Path("/home/danbel1kov/predictive-nav-mppi/benchmark_force_sweep")
+    base_path = Path("./benchmark_force_sweep")
     benchmark_files = list(base_path.rglob("benchmark_cases.json"))
 
     if not benchmark_files:

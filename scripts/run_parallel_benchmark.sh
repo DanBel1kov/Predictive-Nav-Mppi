@@ -126,7 +126,7 @@ for idx in "${!CONFIGS[@]}"; do
     cd "$ROOT_DIR"
     set +u
     source /opt/ros/humble/setup.bash
-    source /home/danbel1kov/hunav_ws/install/setup.bash
+    source $HOME/hunav_ws/install/setup.bash
     source "$ROOT_DIR/install/setup.bash"
     set -u
     export ROS_DOMAIN_ID="$domain"

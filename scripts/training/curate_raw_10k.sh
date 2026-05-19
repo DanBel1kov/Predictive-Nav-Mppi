@@ -14,9 +14,9 @@ echo ""
 # Then test_target would be naturally 2500 at 20% holdout
 
 python3 -m predictive_nav_mppi.curate_people_dataset \
-  /home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_long_corridor_react_0p5.json \
-  /home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_nonlinear_corridor_react_0p5.json \
-  /home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_labyrinth_turns_react_0p5.json \
+  ./datasets/raw_react_0p5/people_dataset_long_corridor_react_0p5.json \
+  ./datasets/raw_react_0p5/people_dataset_nonlinear_corridor_react_0p5.json \
+  ./datasets/raw_react_0p5/people_dataset_labyrinth_turns_react_0p5.json \
   --output_dir ../../datasets/curated_training_10k \
   --obs_len 8 \
   --obs_dt 0.1 \

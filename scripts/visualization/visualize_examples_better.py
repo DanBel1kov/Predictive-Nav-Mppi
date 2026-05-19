@@ -48,7 +48,7 @@ def classify_obs(obs_xy: np.ndarray, nearby_count: int, min_neighbor_dist: float
 
 
 def main():
-    current_path = Path("/home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_merged_react_0p5.json")
+    current_path = Path("./datasets/raw_react_0p5/people_dataset_merged_react_0p5.json")
 
     print("Loading dataset...")
     with open(current_path) as f:
@@ -224,7 +224,7 @@ def main():
                 ax.set_xlim(-1, 1)
                 ax.set_ylim(-1, 1)
 
-    output = Path("/home/danbel1kov/predictive-nav-mppi/trajectory_examples_current.png")
+    output = Path("docs/figures/analysis/trajectory_examples_current.png")
     plt.tight_layout()
     plt.savefig(output, dpi=150, bbox_inches='tight')
     print(f"\n✓ Saved: {output}")

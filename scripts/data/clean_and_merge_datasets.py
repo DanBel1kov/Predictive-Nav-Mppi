@@ -109,16 +109,16 @@ def merge_scenarios(scenario_files: List[Tuple[str, Path]]) -> Dict[str, Any]:
 
 def main():
     scenarios = [
-        ("long_corridor", Path("/home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_long_corridor_react_0p5.json")),
-        ("nonlinear_corridor", Path("/home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_nonlinear_corridor_react_0p5.json")),
-        ("labyrinth_turns", Path("/home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_labyrinth_turns_react_0p5.json")),
+        ("long_corridor", Path("./datasets/raw_react_0p5/people_dataset_long_corridor_react_0p5.json")),
+        ("nonlinear_corridor", Path("./datasets/raw_react_0p5/people_dataset_nonlinear_corridor_react_0p5.json")),
+        ("labyrinth_turns", Path("./datasets/raw_react_0p5/people_dataset_labyrinth_turns_react_0p5.json")),
     ]
 
     print("Cleaning and merging datasets...")
     merged = merge_scenarios(scenarios)
 
     # Save merged dataset
-    output_path = Path("/home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_merged_react_0p5.json")
+    output_path = Path("./datasets/raw_react_0p5/people_dataset_merged_react_0p5.json")
     with open(output_path, 'w') as f:
         json.dump(merged, f)
 

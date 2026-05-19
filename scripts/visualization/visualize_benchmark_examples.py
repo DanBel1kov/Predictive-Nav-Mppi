@@ -27,7 +27,7 @@ def classify_case(case: Dict) -> str:
 
 
 def main():
-    benchmark_cases = Path("/home/danbel1kov/predictive-nav-mppi/benchmark_force_sweep/kalman_react_force_0_025_05_near_robot3/force_0p25/20260513_005606/curated_near_robot/benchmark_cases.json")
+    benchmark_cases = Path("./benchmark_force_sweep/kalman_react_force_0_025_05_near_robot3/force_0p25/20260513_005606/curated_near_robot/benchmark_cases.json")
 
     print("Loading benchmark dataset...")
     with open(benchmark_cases) as f:
@@ -113,7 +113,7 @@ def main():
                 ax.set_xlim(-1, 1)
                 ax.set_ylim(-1, 1)
 
-    output = Path("/home/danbel1kov/predictive-nav-mppi/trajectory_examples_benchmark.png")
+    output = Path("docs/figures/analysis/trajectory_examples_benchmark.png")
     plt.tight_layout()
     plt.savefig(output, dpi=150, bbox_inches='tight')
     print(f"\n✓ Saved: {output}")

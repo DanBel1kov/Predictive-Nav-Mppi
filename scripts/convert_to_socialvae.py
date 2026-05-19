@@ -8,7 +8,7 @@ Also injects the ROBOT as another agent with a fixed person_id (= 9000+i), so So
 human-robot interactions.
 
 Output layout (matches SocialVAE conventions):
-    /home/danbel1kov/SocialVAE/data/predictive_nav/
+    $HOME/SocialVAE/data/predictive_nav/
         train/long_corridor_react.txt
         train/labyrinth_react.txt
         ...
@@ -25,15 +25,15 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 SOURCES = [
-    ("long_corridor_react", "/home/danbel1kov/predictive-nav-mppi/datasets/raw/long_corridor_react_better_rft.json"),
-    ("labyrinth_react",     "/home/danbel1kov/predictive-nav-mppi/datasets/raw/labyrinth_react_test_better_rft.json"),
-    ("nonlinear_react",     "/home/danbel1kov/predictive-nav-mppi/datasets/raw/nonlinear_corridor_react_better_rft.json"),
-    ("long_corridor_v5loop", "/home/danbel1kov/predictive-nav-mppi/datasets/raw_v5loop/long_corridor_v5loop.json"),
-    ("labyrinth_v5loop",     "/home/danbel1kov/predictive-nav-mppi/datasets/raw_v5loop/labyrinth_v5loop.json"),
-    ("nonlinear_v5loop",     "/home/danbel1kov/predictive-nav-mppi/datasets/raw_v5loop/nonlinear_v5loop.json"),
+    ("long_corridor_react", "./datasets/raw/long_corridor_react_better_rft.json"),
+    ("labyrinth_react",     "./datasets/raw/labyrinth_react_test_better_rft.json"),
+    ("nonlinear_react",     "./datasets/raw/nonlinear_corridor_react_better_rft.json"),
+    ("long_corridor_v5loop", "./datasets/raw_v5loop/long_corridor_v5loop.json"),
+    ("labyrinth_v5loop",     "./datasets/raw_v5loop/labyrinth_v5loop.json"),
+    ("nonlinear_v5loop",     "./datasets/raw_v5loop/nonlinear_v5loop.json"),
 ]
 
-OUT_ROOT = Path("/home/danbel1kov/SocialVAE/data/predictive_nav")
+OUT_ROOT = Path.home() / "SocialVAE/data/predictive_nav"
 HOLDOUT_FRACTION = 0.25
 TARGET_DT = 0.4
 ROBOT_ID_OFFSET = 9000  # unique robot id per file

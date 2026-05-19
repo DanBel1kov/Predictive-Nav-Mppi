@@ -104,7 +104,7 @@ def classify_interaction(person_metrics: Dict[str, Any]) -> Set[str]:
 
 
 def main():
-    merged_path = Path("/home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_merged_react_0p5.json")
+    merged_path = Path("./datasets/raw_react_0p5/people_dataset_merged_react_0p5.json")
 
     print("Loading merged dataset...")
     with open(merged_path) as f:

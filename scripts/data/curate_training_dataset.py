@@ -53,7 +53,7 @@ def create_balanced_dataset():
 
     # Load benchmark cases to understand target distribution
     benchmark_files = [
-        Path("/home/danbel1kov/predictive-nav-mppi/benchmark_force_sweep/kalman_react_force_0_025_05_near_robot3/force_0p50/20260513_005848/curated_near_robot/benchmark_cases.json"),
+        Path("./benchmark_force_sweep/kalman_react_force_0_025_05_near_robot3/force_0p50/20260513_005848/curated_near_robot/benchmark_cases.json"),
     ]
 
     benchmark_cases = []
@@ -70,7 +70,7 @@ def create_balanced_dataset():
     benchmark_dist = analyze_distribution(benchmark_cases, "Benchmark (target)")
 
     # Load raw dataset
-    raw_file = Path("/home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_merged_react_0p5.json")
+    raw_file = Path("./datasets/raw_react_0p5/people_dataset_merged_react_0p5.json")
     if not raw_file.exists():
         print(f"❌ Raw dataset not found: {raw_file}")
         return
@@ -169,7 +169,7 @@ def create_balanced_dataset():
     print(f"  Test:  {len(test_cases)} cases (25%)")
 
     # Save datasets
-    output_base = Path("/home/danbel1kov/predictive-nav-mppi/datasets")
+    output_base = Path("./datasets")
     output_base.mkdir(exist_ok=True)
 
     # Add source_name for scene context

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Analyze merged dataset with full interaction classification."""
+"""Analyze merged dataset - only observations near robot."""
 from __future__ import annotations
 
 import json
@@ -9,10 +9,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
 
 
-def compute_full_metrics(frames: List[Dict[str, Any]], interaction_dist: float = 1.5) -> Dict[Tuple[int, int], Dict[str, Any]]:
-    """Compute metrics for each person-frame observation window with neighbor detection."""
+def compute_full_metrics_near_robot(
+    frames: List[Dict[str, Any]],
+    interaction_dist: float = 1.5,
+    visibility_radius: float = 6.0,
+) -> Dict[Tuple[int, int], Dict[str, Any]]:
+    """Compute metrics for observations near robot only."""
 
-    # First pass: build time-indexed person positions for neighbor lookup
+    # Time-indexed person positions for neighbor lookup
     time_indexed = {}
     for frame in frames:
         t = frame.get('t')
@@ -24,8 +28,8 @@ def compute_full_metrics(frames: List[Dict[str, Any]], interaction_dist: float =
             if pid is not None and x is not None and y is not None:
                 time_indexed[t][pid] = (x, y)
 
-    # Second pass: compute metrics for each observation window
-    person_data: Dict[int, List[Tuple[float, float, float, int]]] = {}  # pid -> [(t, x, y, frame_idx)]
+    # Build person trajectories
+    person_data: Dict[int, List[Tuple[float, float, float, int]]] = {}
 
     for frame_idx, frame in enumerate(frames):
         t = frame.get('t', 0)
@@ -40,6 +44,8 @@ def compute_full_metrics(frames: List[Dict[str, Any]], interaction_dist: float =
     metrics = {}
     obs_len = 8
     obs_dt = 0.1
+    near_robot_count = 0
+    total_count = 0
 
     for pid, trajectory in person_data.items():
         trajectory.sort(key=lambda x: x[0])
@@ -54,7 +60,30 @@ def compute_full_metrics(frames: List[Dict[str, Any]], interaction_dist: float =
             if obs_xy.shape[0] < 2:
                 continue
 
-            # Basic metrics
+            total_count += 1
+
+            # Get final position and corresponding frame
+            final_t = trajectory[i][0]
+            final_pos = obs_xy[-1]
+            frame_idx = trajectory[i][3]
+
+            # Find robot position at this time
+            frame = frames[frame_idx]
+            robot_data = frame.get('robot', {})
+            robot_x = robot_data.get('x')
+            robot_y = robot_data.get('y')
+
+            if robot_x is None or robot_y is None:
+                continue
+
+            # Check if near robot
+            dist_to_robot = math.sqrt((final_pos[0] - robot_x)**2 + (final_pos[1] - robot_y)**2)
+            if dist_to_robot > visibility_radius:
+                continue
+
+            near_robot_count += 1
+
+            # Compute metrics
             path_len = float(np.sum(np.linalg.norm(obs_xy[1:] - obs_xy[:-1], axis=1)))
             displacement = float(np.linalg.norm(obs_xy[-1] - obs_xy[0]))
 
@@ -74,10 +103,7 @@ def compute_full_metrics(frames: List[Dict[str, Any]], interaction_dist: float =
             max_speed = float(np.max(speeds)) if speeds.size > 0 else 0.0
             mean_speed = float(np.mean(speeds)) if speeds.size > 0 else 0.0
 
-            # Neighbor detection - look at the observation window's last frame
-            final_t = trajectory[i][0]
-            final_pos = obs_xy[-1]
-
+            # Neighbor detection
             neighbors = []
             if final_t in time_indexed:
                 positions = time_indexed[final_t]
@@ -100,14 +126,15 @@ def compute_full_metrics(frames: List[Dict[str, Any]], interaction_dist: float =
                 'displacement': displacement,
                 'neighbor_count': neighbor_count,
                 'min_neighbor_dist': min_neighbor_dist if math.isfinite(min_neighbor_dist) else 999.0,
-                'frame_idx': trajectory[i][3],
+                'dist_to_robot': dist_to_robot,
+                'frame_idx': frame_idx,
             }
 
-    return metrics
+    return metrics, near_robot_count, total_count
 
 
 def classify_interaction(obs_metrics: Dict[str, Any], interaction_dist: float = 1.5) -> Set[str]:
-    """Classify interaction category using new rules."""
+    """Classify interaction category."""
     tags = {"all"}
 
     heading_change_deg = obs_metrics.get('heading_change_deg', 0.0)
@@ -116,27 +143,21 @@ def classify_interaction(obs_metrics: Dict[str, Any], interaction_dist: float = 
     neighbor_count = obs_metrics.get('neighbor_count', 0)
     min_neighbor_dist = obs_metrics.get('min_neighbor_dist', 999.0)
 
-    # LINEAR: continuous movement in one direction
     if heading_change_deg < 30.0:
         tags.add("linear")
 
-    # TURNING: large heading change
     if heading_change_deg >= 45.0:
         tags.add("turning")
 
-    # STOP_GO: significant speed variations
     if max_speed >= 0.25 and min_speed <= 0.10 and (max_speed - min_speed) >= 0.25:
         tags.add("stop_go")
 
-    # INTERACTION: 1-3 neighbors at close distance
     if 1 <= neighbor_count <= 3 and min_neighbor_dist <= interaction_dist:
         tags.add("interaction")
 
-    # DENSE_INTERACTION: 4+ neighbors at close distance
     if neighbor_count >= 4 and min_neighbor_dist <= interaction_dist:
         tags.add("dense_interaction")
 
-    # COMPLEX: 2+ complex factors
     complexity_axes = (
         int("turning" in tags)
         + int("stop_go" in tags)
@@ -150,7 +171,7 @@ def classify_interaction(obs_metrics: Dict[str, Any], interaction_dist: float = 
 
 
 def main():
-    merged_path = Path("/home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_merged_react_0p5.json")
+    merged_path = Path("./datasets/raw_react_0p5/people_dataset_merged_react_0p5.json")
 
     print("Loading merged dataset...")
     with open(merged_path) as f:
@@ -159,9 +180,11 @@ def main():
     frames = data['frames']
     print(f"Loaded {len(frames)} frames")
 
-    print("\nComputing metrics with interaction...")
-    metrics = compute_full_metrics(frames)
-    print(f"Computed metrics for {len(metrics)} observations")
+    print("\nComputing metrics (near robot only, radius=6.0m)...")
+    metrics, near_robot_count, total_count = compute_full_metrics_near_robot(frames)
+    print(f"Total observations: {total_count}")
+    print(f"Near robot: {near_robot_count} ({100*near_robot_count/total_count:.1f}%)")
+    print(f"With valid metrics: {len(metrics)}")
 
     # Classify
     print("\nClassifying interactions...")
@@ -174,11 +197,11 @@ def main():
 
     total = sum(tag_counts.values())
 
-    print(f"\n{'='*60}")
-    print(f"Interaction category distribution (total: {total})")
-    print(f"{'='*60}")
+    print(f"\n{'='*70}")
+    print(f"Interaction distribution (observations near robot)")
+    print(f"Total: {total} observations")
+    print(f"{'='*70}")
 
-    # Custom order for display
     order = ["linear", "interaction", "dense_interaction", "turning", "stop_go", "complex"]
     for tag in order:
         if tag in tag_counts:
@@ -186,26 +209,10 @@ def main():
             pct = 100.0 * count / total if total > 0 else 0.0
             print(f"  {tag:20s}: {count:7d} ({pct:5.1f}%)")
 
-    # Save analysis
-    analysis = {
-        'total_observations': len(metrics),
-        'total_frames': len(frames),
-        'unique_people': len(set(k[0] for k in metrics.keys())),
-        'tag_counts': tag_counts,
-        'duration_seconds': frames[-1]['t'] if frames else 0,
-        'tag_order': order,
-    }
-
-    output_path = merged_path.parent / "analysis_merged_full_react_0p5.json"
-    with open(output_path, 'w') as f:
-        json.dump(analysis, f, indent=2)
-
-    print(f"\n✓ Analysis saved: {output_path}")
-
-    # Show comparison with benchmark
-    print(f"\n{'='*60}")
+    # Comparison with benchmark
+    print(f"\n{'='*70}")
     print("Comparison with benchmark (force=0.5):")
-    print(f"{'='*60}")
+    print(f"{'='*70}")
     benchmark = {
         'linear': 4.9,
         'interaction': 12.2,
@@ -219,7 +226,26 @@ def main():
             current_pct = 100.0 * tag_counts[tag] / total
             benchmark_pct = benchmark.get(tag, 0)
             diff = current_pct - benchmark_pct
-            print(f"  {tag:20s}: current={current_pct:5.1f}%, benchmark={benchmark_pct:5.1f}%, diff={diff:+5.1f}%")
+            bar = "█" * max(0, int(diff/2)) if diff > 0 else "▓" * max(0, int(-diff/2))
+            print(f"  {tag:20s}: {current_pct:5.1f}% (bench {benchmark_pct:5.1f}%) {bar}")
+
+    # Save analysis
+    analysis = {
+        'total_observations': len(metrics),
+        'near_robot_observations': near_robot_count,
+        'total_frames': len(frames),
+        'unique_people': len(set(k[0] for k in metrics.keys())),
+        'tag_counts': tag_counts,
+        'duration_seconds': frames[-1]['t'] if frames else 0,
+        'visibility_radius': 6.0,
+        'tag_order': order,
+    }
+
+    output_path = merged_path.parent / "analysis_merged_near_robot_react_0p5.json"
+    with open(output_path, 'w') as f:
+        json.dump(analysis, f, indent=2)
+
+    print(f"\n✓ Analysis saved: {output_path}")
 
 
 if __name__ == "__main__":

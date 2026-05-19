@@ -49,7 +49,7 @@ def classify_obs(obs_xy: np.ndarray, nearby_count: int, min_neighbor_dist: float
 
 
 def main():
-    current_path = Path("/home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_merged_react_0p5.json")
+    current_path = Path("./datasets/raw_react_0p5/people_dataset_merged_react_0p5.json")
 
     print("Loading dataset...")
     with open(current_path) as f:

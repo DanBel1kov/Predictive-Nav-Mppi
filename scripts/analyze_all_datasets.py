@@ -21,18 +21,18 @@ from typing import Dict, List
 import numpy as np
 
 # Mirror curate logic
-sys.path.insert(0, "/home/danbel1kov/predictive-nav-mppi/src/predictive_nav_mppi")
+sys.path.insert(0, "./src/predictive_nav_mppi")
 from predictive_nav_mppi.benchmark_people_predictors import (
     _classify_case_tags, _sample_obs, _sample_gt, Case
 )
 
 SOURCES = [
-    ("react_v2/long_corridor", "/home/danbel1kov/predictive-nav-mppi/datasets/raw/long_corridor_react_better_rft.json"),
-    ("react_v2/labyrinth",     "/home/danbel1kov/predictive-nav-mppi/datasets/raw/labyrinth_react_test_better_rft.json"),
-    ("react_v2/nonlinear",     "/home/danbel1kov/predictive-nav-mppi/datasets/raw/nonlinear_corridor_react_better_rft.json"),
-    ("v5loop/long_corridor",   "/home/danbel1kov/predictive-nav-mppi/datasets/raw_v5loop/long_corridor_v5loop.json"),
-    ("v5loop/labyrinth",       "/home/danbel1kov/predictive-nav-mppi/datasets/raw_v5loop/labyrinth_v5loop.json"),
-    ("v5loop/nonlinear",       "/home/danbel1kov/predictive-nav-mppi/datasets/raw_v5loop/nonlinear_v5loop.json"),
+    ("react_v2/long_corridor", "./datasets/raw/long_corridor_react_better_rft.json"),
+    ("react_v2/labyrinth",     "./datasets/raw/labyrinth_react_test_better_rft.json"),
+    ("react_v2/nonlinear",     "./datasets/raw/nonlinear_corridor_react_better_rft.json"),
+    ("v5loop/long_corridor",   "./datasets/raw_v5loop/long_corridor_v5loop.json"),
+    ("v5loop/labyrinth",       "./datasets/raw_v5loop/labyrinth_v5loop.json"),
+    ("v5loop/nonlinear",       "./datasets/raw_v5loop/nonlinear_v5loop.json"),
 ]
 
 OBS_LEN, OBS_DT = 8, 0.4

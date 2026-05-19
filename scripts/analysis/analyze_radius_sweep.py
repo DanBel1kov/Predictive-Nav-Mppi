@@ -156,9 +156,9 @@ def analyze_radius(frames, tracks, robot, radius: float) -> Dict[str, int]:
 
 def main():
     datasets = [
-        ("long_corridor", "/home/danbel1kov/predictive-nav-mppi/datasets/raw_benchmark_force/people_dataset_long_corridor.json"),
-        ("labyrinth_turns", "/home/danbel1kov/predictive-nav-mppi/datasets/raw_benchmark_force/people_dataset_labyrinth_turns.json"),
-        ("nonlinear_corridor", "/home/danbel1kov/predictive-nav-mppi/datasets/raw_benchmark_force/people_dataset_nonlinear_corridor.json"),
+        ("long_corridor", "./datasets/raw_benchmark_force/people_dataset_long_corridor.json"),
+        ("labyrinth_turns", "./datasets/raw_benchmark_force/people_dataset_labyrinth_turns.json"),
+        ("nonlinear_corridor", "./datasets/raw_benchmark_force/people_dataset_nonlinear_corridor.json"),
     ]
 
     # Pre-load
@@ -231,8 +231,8 @@ def main():
     ax2.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.0f%%"))
     fig2.tight_layout()
 
-    out1 = Path("/home/danbel1kov/predictive-nav-mppi/radius_sweep_per_category.png")
-    out2 = Path("/home/danbel1kov/predictive-nav-mppi/radius_sweep_pooled.png")
+    out1 = Path("./docs/figures/analysis/radius_sweep_per_category.png")
+    out2 = Path("./docs/figures/analysis/radius_sweep_pooled.png")
     fig.savefig(out1, dpi=130, bbox_inches="tight")
     fig2.savefig(out2, dpi=130, bbox_inches="tight")
     print(f"\nSaved: {out1}")

@@ -211,8 +211,8 @@ def find_examples_by_category(frames: List[Dict[str, Any]], num_examples: int = 
 
 def main():
     # Load both datasets
-    benchmark_curated = Path("/home/danbel1kov/predictive-nav-mppi/benchmark_people_predictors/curated_benchmark/benchmark_cases.json")
-    current_merged = Path("/home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_merged_react_0p5.json")
+    benchmark_curated = Path("./benchmark_people_predictors/curated_benchmark/benchmark_cases.json")
+    current_merged = Path("./datasets/raw_react_0p5/people_dataset_merged_react_0p5.json")
 
     datasets = [
         ("Benchmark (curated)", benchmark_curated),

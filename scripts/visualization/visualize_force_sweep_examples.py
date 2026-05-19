@@ -120,7 +120,7 @@ def create_visualization(force_value: float, cases_path: Path, output_path: Path
 
 
 def main():
-    base_path = Path("/home/danbel1kov/predictive-nav-mppi/benchmark_force_sweep/kalman_react_force_0_025_05_near_robot3")
+    base_path = Path("./benchmark_force_sweep/kalman_react_force_0_025_05_near_robot3")
 
     forces = [
         (0.0, "force_0p00/20260513_005323/curated_near_robot/benchmark_cases.json"),
@@ -130,7 +130,7 @@ def main():
 
     for force_value, rel_path in forces:
         cases_path = base_path / rel_path
-        output_path = Path(f"/home/danbel1kov/predictive-nav-mppi/trajectory_examples_force_{force_value:.2f}.png")
+        output_path = Path(f"docs/figures/analysis/trajectory_examples_force_{force_value:.2f}.png")
         create_visualization(force_value, cases_path, output_path)
 
     print("\n" + "="*70)
@@ -138,7 +138,7 @@ def main():
     print("="*70)
     print("\nGenerated files:")
     for force_value, _ in forces:
-        output = Path(f"/home/danbel1kov/predictive-nav-mppi/trajectory_examples_force_{force_value:.2f}.png")
+        output = Path(f"docs/figures/analysis/trajectory_examples_force_{force_value:.2f}.png")
         print(f"  Force {force_value}: {output}")
 
 

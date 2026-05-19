@@ -8,11 +8,11 @@ Quick start (Humble, Gazebo Classic)
 
 ```bash
 cd ~/hunav_ws/src/hunav_gazebo_wrapper
-git apply /home/danbel1kov/predictive-nav-mppi/patches/hunav_actor_scale.patch
-git apply /home/danbel1kov/predictive-nav-mppi/patches/hunav_behavior_tree_path.patch
+git apply $HOME/predictive-nav-mppi/patches/hunav_actor_scale.patch
+git apply $HOME/predictive-nav-mppi/patches/hunav_behavior_tree_path.patch
 
 cd ../hunav_sim/hunav_agent_manager
-git apply /home/danbel1kov/predictive-nav-mppi/patches/hunav_robot_force_scale.patch
+git apply $HOME/predictive-nav-mppi/patches/hunav_robot_force_scale.patch
 
 cd ~/hunav_ws
 colcon build --packages-select hunav_gazebo_wrapper hunav_agent_manager --symlink-install
@@ -136,10 +136,10 @@ ros2 run predictive_nav_mppi benchmark_people_predictors -- \
   --dataset /tmp/people_dataset.json \
   --output_dir /tmp/predictor_bench \
   --obs_len 8 --obs_dt 0.4 --pred_dt 0.1 --pred_steps 12,26 \
-  --social_gru_weights /home/danbel1kov/predictive-nav-mppi/src/predictive_nav_mppi/predictive_nav_mppi/models/best_model.pt \
-  --social_vae_repo_path /home/danbel1kov/SocialVAE \
-  --social_vae_ckpt_path /home/danbel1kov/predictive-nav-mppi/src/predictive_nav_mppi/predictive_nav_mppi/models/vae_hotel \
-  --social_vae_config_path /home/danbel1kov/SocialVAE/config/hotel.py \
+  --social_gru_weights $HOME/predictive-nav-mppi/src/predictive_nav_mppi/predictive_nav_mppi/models/best_model.pt \
+  --social_vae_repo_path $HOME/SocialVAE \
+  --social_vae_ckpt_path $HOME/predictive-nav-mppi/src/predictive_nav_mppi/predictive_nav_mppi/models/vae_hotel \
+  --social_vae_config_path $HOME/SocialVAE/config/hotel.py \
   --social_vae_samples 20 \
   --n_permutations 3000
 ```
@@ -262,13 +262,13 @@ source /opt/ros/humble/setup.bash
 source ~/hunav_ws/install/setup.bash
 source install/setup.bash
 
-rm -rf /home/danbel1kov/predictive-nav-mppi/datasets/curated_force1p0
+rm -rf $HOME/predictive-nav-mppi/datasets/curated_force1p0
 ros2 run predictive_nav_mppi curate_people_dataset \
   --datasets \
-    /home/danbel1kov/predictive-nav-mppi/datasets/people_force1p0/long_corridor.json \
-    /home/danbel1kov/predictive-nav-mppi/datasets/people_force1p0/nonlinear_corridor.json \
-    /home/danbel1kov/predictive-nav-mppi/datasets/people_force1p0/labyrinth_turns.json \
-  --output_dir /home/danbel1kov/predictive-nav-mppi/datasets/curated_force1p0 \
+    $HOME/predictive-nav-mppi/datasets/people_force1p0/long_corridor.json \
+    $HOME/predictive-nav-mppi/datasets/people_force1p0/nonlinear_corridor.json \
+    $HOME/predictive-nav-mppi/datasets/people_force1p0/labyrinth_turns.json \
+  --output_dir $HOME/predictive-nav-mppi/datasets/curated_force1p0 \
   --near_robot_radius 6.0 \
   --near_robot_fov_deg 360.0 \
   --pred_len 12 \
@@ -286,9 +286,9 @@ source ~/hunav_ws/install/setup.bash
 source install/setup.bash
 
 ros2 run predictive_nav_mppi train_residual_predictor \
-  --train_dataset /home/danbel1kov/predictive-nav-mppi/datasets/curated_force1p0/train_residual_cases.json \
-  --val_dataset   /home/danbel1kov/predictive-nav-mppi/datasets/curated_force1p0/benchmark_residual_cases.json \
-  --output_dir    /home/danbel1kov/predictive-nav-mppi/models/kalman_residual_force1p0 \
+  --train_dataset $HOME/predictive-nav-mppi/datasets/curated_force1p0/train_residual_cases.json \
+  --val_dataset   $HOME/predictive-nav-mppi/datasets/curated_force1p0/benchmark_residual_cases.json \
+  --output_dir    $HOME/predictive-nav-mppi/models/kalman_residual_force1p0 \
   --obs_len 8 --pred_len 12 --obs_dt 0.4 --pred_dt 0.4 \
   --batch_size 64 --epochs 40 --lr 5e-4 --weight_decay 1e-4 \
   --hidden 64 --social_hidden 32 --k_neighbors 3 \
@@ -300,11 +300,11 @@ SocialVAE with velocity/jerk regularization:
 
 ```bash
 ros2 run predictive_nav_mppi finetune_social_vae \
-  --social_vae_repo  /home/danbel1kov/SocialVAE \
-  --social_vae_ckpt  /home/danbel1kov/SocialVAE/models/hotel \
-  --train_dataset    /home/danbel1kov/predictive-nav-mppi/datasets/curated_force1p0/train_residual_cases.json \
-  --val_dataset      /home/danbel1kov/predictive-nav-mppi/datasets/curated_force1p0/benchmark_residual_cases.json \
-  --output_dir       /home/danbel1kov/predictive-nav-mppi/models/social_vae_finetuned_force1p0_stable \
+  --social_vae_repo  $HOME/SocialVAE \
+  --social_vae_ckpt  $HOME/SocialVAE/models/hotel \
+  --train_dataset    $HOME/predictive-nav-mppi/datasets/curated_force1p0/train_residual_cases.json \
+  --val_dataset      $HOME/predictive-nav-mppi/datasets/curated_force1p0/benchmark_residual_cases.json \
+  --output_dir       $HOME/predictive-nav-mppi/models/social_vae_finetuned_force1p0_stable \
   --obs_len 8 --pred_len 12 --obs_dt 0.4 --ob_radius 2.0 --hidden_dim 256 \
   --max_neighbors 8 --batch_size 32 --epochs 8 --lr 3e-5 --weight_decay 1e-4 \
   --kl_weight 0.2 --kl_warmup_epochs 1 --early_stop_patience 2 \
@@ -317,11 +317,11 @@ SocialVAE without velocity/jerk regularization:
 
 ```bash
 ros2 run predictive_nav_mppi finetune_social_vae \
-  --social_vae_repo  /home/danbel1kov/SocialVAE \
-  --social_vae_ckpt  /home/danbel1kov/SocialVAE/models/hotel \
-  --train_dataset    /home/danbel1kov/predictive-nav-mppi/datasets/curated_force1p0/train_residual_cases.json \
-  --val_dataset      /home/danbel1kov/predictive-nav-mppi/datasets/curated_force1p0/benchmark_residual_cases.json \
-  --output_dir       /home/danbel1kov/predictive-nav-mppi/models/social_vae_finetuned_force1p0 \
+  --social_vae_repo  $HOME/SocialVAE \
+  --social_vae_ckpt  $HOME/SocialVAE/models/hotel \
+  --train_dataset    $HOME/predictive-nav-mppi/datasets/curated_force1p0/train_residual_cases.json \
+  --val_dataset      $HOME/predictive-nav-mppi/datasets/curated_force1p0/benchmark_residual_cases.json \
+  --output_dir       $HOME/predictive-nav-mppi/models/social_vae_finetuned_force1p0 \
   --obs_len 8 --pred_len 12 --obs_dt 0.4 --ob_radius 2.0 --hidden_dim 256 \
   --max_neighbors 8 --batch_size 32 --epochs 8 --lr 3e-5 --weight_decay 1e-4 \
   --kl_weight 0.2 --kl_warmup_epochs 1 --early_stop_patience 2 \
@@ -334,10 +334,10 @@ Residual:
 
 ```bash
 ros2 run predictive_nav_mppi benchmark_people_predictors -- \
-  --dataset /home/danbel1kov/predictive-nav-mppi/datasets/people_force1p0/long_corridor.json \
-  --output_dir /home/danbel1kov/predictive-nav-mppi/benchmark_people_predictors/force1p0_residual_long_corridor \
+  --dataset $HOME/predictive-nav-mppi/datasets/people_force1p0/long_corridor.json \
+  --output_dir $HOME/predictive-nav-mppi/benchmark_people_predictors/force1p0_residual_long_corridor \
   --obs_len 8 --obs_dt 0.4 --pred_dt 0.4 --pred_steps 12 \
-  --residual_scene_model_weights /home/danbel1kov/predictive-nav-mppi/models/kalman_residual_force1p0/best_residual_model.pt \
+  --residual_scene_model_weights $HOME/predictive-nav-mppi/models/kalman_residual_force1p0/best_residual_model.pt \
   --scene_patch_size_m 6.0 --scene_patch_pixels 32 \
   --streaming_metrics \
   --stride 1 \
@@ -348,12 +348,12 @@ SocialVAE without aux regularization:
 
 ```bash
 ros2 run predictive_nav_mppi benchmark_people_predictors -- \
-  --dataset /home/danbel1kov/predictive-nav-mppi/datasets/people_force1p0/long_corridor.json \
-  --output_dir /home/danbel1kov/predictive-nav-mppi/benchmark_people_predictors/force1p0_vae_long_corridor \
+  --dataset $HOME/predictive-nav-mppi/datasets/people_force1p0/long_corridor.json \
+  --output_dir $HOME/predictive-nav-mppi/benchmark_people_predictors/force1p0_vae_long_corridor \
   --obs_len 8 --obs_dt 0.4 --pred_dt 0.4 --pred_steps 12 \
-  --social_vae_repo_path /home/danbel1kov/SocialVAE \
-  --social_vae_ckpt_path /home/danbel1kov/predictive-nav-mppi/models/social_vae_finetuned_force1p0 \
-  --social_vae_config_path /home/danbel1kov/SocialVAE/config/hotel.py \
+  --social_vae_repo_path $HOME/SocialVAE \
+  --social_vae_ckpt_path $HOME/predictive-nav-mppi/models/social_vae_finetuned_force1p0 \
+  --social_vae_config_path $HOME/SocialVAE/config/hotel.py \
   --social_vae_samples 20 \
   --streaming_metrics \
   --stride 1 \
@@ -364,12 +364,12 @@ SocialVAE with velocity/jerk regularization:
 
 ```bash
 ros2 run predictive_nav_mppi benchmark_people_predictors -- \
-  --dataset /home/danbel1kov/predictive-nav-mppi/datasets/people_force1p0/long_corridor.json \
-  --output_dir /home/danbel1kov/predictive-nav-mppi/benchmark_people_predictors/force1p0_vae_stable_long_corridor \
+  --dataset $HOME/predictive-nav-mppi/datasets/people_force1p0/long_corridor.json \
+  --output_dir $HOME/predictive-nav-mppi/benchmark_people_predictors/force1p0_vae_stable_long_corridor \
   --obs_len 8 --obs_dt 0.4 --pred_dt 0.4 --pred_steps 12 \
-  --social_vae_repo_path /home/danbel1kov/SocialVAE \
-  --social_vae_ckpt_path /home/danbel1kov/predictive-nav-mppi/models/social_vae_finetuned_force1p0_stable \
-  --social_vae_config_path /home/danbel1kov/SocialVAE/config/hotel.py \
+  --social_vae_repo_path $HOME/SocialVAE \
+  --social_vae_ckpt_path $HOME/predictive-nav-mppi/models/social_vae_finetuned_force1p0_stable \
+  --social_vae_config_path $HOME/SocialVAE/config/hotel.py \
   --social_vae_samples 20 \
   --streaming_metrics \
   --stride 1 \
@@ -397,7 +397,7 @@ ros2 run predictive_nav_mppi run_paired_benchmark \
   --humans-react-to-robot --robot-force-scale 1.0 \
   --left-mode standard --left-predictor kalman \
   --right-mode standard --right-predictor residual \
-  --residual-weights /home/danbel1kov/predictive-nav-mppi/models/kalman_residual_force1p0/best_residual_model.pt \
+  --residual-weights $HOME/predictive-nav-mppi/models/kalman_residual_force1p0/best_residual_model.pt \
   --residual-alpha 1.0 --residual-beta 0.0 --residual-clip 0.0 \
   --no-residual-turn-gate \
   --residual-tag force1p0_honest
@@ -412,9 +412,9 @@ ros2 run predictive_nav_mppi run_paired_benchmark \
   --humans-react-to-robot --robot-force-scale 1.0 \
   --left-mode standard --left-predictor kalman \
   --right-mode standard --right-predictor social_vae \
-  --social-vae-repo /home/danbel1kov/SocialVAE \
-  --social-vae-ckpt /home/danbel1kov/predictive-nav-mppi/models/social_vae_finetuned_force1p0_stable \
-  --social-vae-config /home/danbel1kov/SocialVAE/config/hotel.py \
+  --social-vae-repo $HOME/SocialVAE \
+  --social-vae-ckpt $HOME/predictive-nav-mppi/models/social_vae_finetuned_force1p0_stable \
+  --social-vae-config $HOME/SocialVAE/config/hotel.py \
   --social-vae-tag force1p0_stable
 ```
 
@@ -427,13 +427,13 @@ ros2 run predictive_nav_mppi run_paired_benchmark \
   --humans-react-to-robot --robot-force-scale 1.0 \
   --left-mode standard --left-predictor residual \
   --right-mode standard --right-predictor social_vae \
-  --residual-weights /home/danbel1kov/predictive-nav-mppi/models/kalman_residual_force1p0/best_residual_model.pt \
+  --residual-weights $HOME/predictive-nav-mppi/models/kalman_residual_force1p0/best_residual_model.pt \
   --residual-alpha 1.0 --residual-beta 0.0 --residual-clip 0.0 \
   --no-residual-turn-gate \
   --residual-tag force1p0_honest \
-  --social-vae-repo /home/danbel1kov/SocialVAE \
-  --social-vae-ckpt /home/danbel1kov/predictive-nav-mppi/models/social_vae_finetuned_force1p0_stable \
-  --social-vae-config /home/danbel1kov/SocialVAE/config/hotel.py \
+  --social-vae-repo $HOME/SocialVAE \
+  --social-vae-ckpt $HOME/predictive-nav-mppi/models/social_vae_finetuned_force1p0_stable \
+  --social-vae-config $HOME/SocialVAE/config/hotel.py \
   --social-vae-tag force1p0_stable
 ```
 

@@ -111,7 +111,7 @@ def main():
     print("=" * 70)
 
     # Find all benchmark files
-    base_path = Path("/home/danbel1kov/predictive-nav-mppi/benchmark_force_sweep")
+    base_path = Path("./benchmark_force_sweep")
     bench_files = list(base_path.rglob("benchmark_cases.json"))
     bench_files = [f for f in bench_files if f.parent.name == "curated_near_robot"]
 
@@ -206,7 +206,7 @@ def main():
     print(f"Test:  {len(test_cases)} cases (25%)")
 
     # Save files
-    output_dir = Path("/home/danbel1kov/predictive-nav-mppi/datasets")
+    output_dir = Path("./datasets")
     output_dir.mkdir(exist_ok=True)
 
     train_file = output_dir / "residual_train.json"
@@ -223,7 +223,7 @@ def main():
     print("TRAINING COMMAND")
     print("=" * 70)
     print()
-    print("cd /home/danbel1kov/predictive-nav-mppi/src/predictive_nav_mppi")
+    print("cd ./src/predictive_nav_mppi")
     print()
     print("python3 -m predictive_nav_mppi.train_residual_predictor \\")
     print(f"  --train_file ../../datasets/residual_train.json \\")

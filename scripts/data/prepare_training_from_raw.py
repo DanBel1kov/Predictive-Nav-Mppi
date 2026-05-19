@@ -206,9 +206,9 @@ def main():
 
     # Load raw datasets
     raw_files = [
-        ("/home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_long_corridor_react_0p5.json", "long_corridor"),
-        ("/home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_nonlinear_corridor_react_0p5.json", "nonlinear_corridor"),
-        ("/home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_labyrinth_turns_react_0p5.json", "labyrinth_turns"),
+        ("./datasets/raw_react_0p5/people_dataset_long_corridor_react_0p5.json", "long_corridor"),
+        ("./datasets/raw_react_0p5/people_dataset_nonlinear_corridor_react_0p5.json", "nonlinear_corridor"),
+        ("./datasets/raw_react_0p5/people_dataset_labyrinth_turns_react_0p5.json", "labyrinth_turns"),
     ]
 
     all_cases = []
@@ -270,7 +270,7 @@ def main():
     print("✓ Kalman baselines added")
 
     # Save train/test
-    output_dir = Path("/home/danbel1kov/predictive-nav-mppi/datasets")
+    output_dir = Path("./datasets")
     output_dir.mkdir(exist_ok=True)
 
     train_file = output_dir / "training_raw_10k.json"
@@ -287,7 +287,7 @@ def main():
     print("TRAINING COMMAND")
     print("=" * 70)
     print()
-    print("cd /home/danbel1kov/predictive-nav-mppi/src/predictive_nav_mppi")
+    print("cd ./src/predictive_nav_mppi")
     print()
     print("python3 -m predictive_nav_mppi.train_residual_predictor \\")
     print(f"  --train_dataset ../../datasets/training_raw_10k.json \\")

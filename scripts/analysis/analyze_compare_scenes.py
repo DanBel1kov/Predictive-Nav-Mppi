@@ -200,17 +200,17 @@ def analyze(path: Path, label: str) -> Dict[str, int]:
 def main() -> None:
     scenes = [
         ("bench f=0.00\nlong_corridor", "bench",
-         "/home/danbel1kov/predictive-nav-mppi/benchmark_force_sweep/kalman_react_force_0_025_05_near_robot3/force_0p00/people_dataset_force_0p00.json"),
+         "./benchmark_force_sweep/kalman_react_force_0_025_05_near_robot3/force_0p00/people_dataset_force_0p00.json"),
         ("bench f=0.25\nlong_corridor", "bench",
-         "/home/danbel1kov/predictive-nav-mppi/benchmark_force_sweep/kalman_react_force_0_025_05_near_robot3/force_0p25/people_dataset_force_0p25.json"),
+         "./benchmark_force_sweep/kalman_react_force_0_025_05_near_robot3/force_0p25/people_dataset_force_0p25.json"),
         ("bench f=0.50\nlong_corridor", "bench",
-         "/home/danbel1kov/predictive-nav-mppi/benchmark_force_sweep/kalman_react_force_0_025_05_near_robot3/force_0p50/people_dataset_force_0p50.json"),
+         "./benchmark_force_sweep/kalman_react_force_0_025_05_near_robot3/force_0p50/people_dataset_force_0p50.json"),
         ("manual f=0.5\nlong_corridor", "manual",
-         "/home/danbel1kov/predictive-nav-mppi/datasets/raw_benchmark_force/people_dataset_long_corridor.json"),
+         "./datasets/raw_benchmark_force/people_dataset_long_corridor.json"),
         ("manual f=0.5\nlabyrinth_turns", "manual",
-         "/home/danbel1kov/predictive-nav-mppi/datasets/raw_benchmark_force/people_dataset_labyrinth_turns.json"),
+         "./datasets/raw_benchmark_force/people_dataset_labyrinth_turns.json"),
         ("manual f=0.5\nnonlinear_corridor", "manual",
-         "/home/danbel1kov/predictive-nav-mppi/datasets/raw_benchmark_force/people_dataset_nonlinear_corridor.json"),
+         "./datasets/raw_benchmark_force/people_dataset_nonlinear_corridor.json"),
     ]
     results = []
     for label, source, path in scenes:
@@ -271,7 +271,7 @@ def main() -> None:
     axes[2].grid(True, axis="y", alpha=0.3)
 
     fig.tight_layout()
-    out = Path("/home/danbel1kov/predictive-nav-mppi/compare_bench_vs_manual_categories.png")
+    out = Path("./docs/figures/analysis/compare_bench_vs_manual_categories.png")
     fig.savefig(out, dpi=130)
     print("Saved:", out)
 

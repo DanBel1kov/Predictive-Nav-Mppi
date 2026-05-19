@@ -38,7 +38,7 @@ def visualize_benchmark(output_path: Path):
     print("BENCHMARK DATASET")
     print("="*70)
 
-    bench_cases = Path("/home/danbel1kov/predictive-nav-mppi/benchmark_force_sweep/kalman_react_force_0_025_05_near_robot3/force_0p25/20260513_005606/curated_near_robot/benchmark_cases.json")
+    bench_cases = Path("./benchmark_force_sweep/kalman_react_force_0_025_05_near_robot3/force_0p25/20260513_005606/curated_near_robot/benchmark_cases.json")
 
     with open(bench_cases) as f:
         data = json.load(f)
@@ -135,7 +135,7 @@ def visualize_raw(output_path: Path):
     print("RAW MERGED DATASET")
     print("="*70)
 
-    raw_path = Path("/home/danbel1kov/predictive-nav-mppi/datasets/raw_react_0p5/people_dataset_merged_react_0p5.json")
+    raw_path = Path("./datasets/raw_react_0p5/people_dataset_merged_react_0p5.json")
 
     with open(raw_path) as f:
         data = json.load(f)
@@ -365,11 +365,11 @@ def visualize_raw(output_path: Path):
 
 
 if __name__ == "__main__":
-    visualize_benchmark(Path("/home/danbel1kov/predictive-nav-mppi/examples_benchmark.png"))
-    visualize_raw(Path("/home/danbel1kov/predictive-nav-mppi/examples_raw_merged.png"))
+    visualize_benchmark(Path("./docs/figures/analysis/examples_benchmark.png"))
+    visualize_raw(Path("./docs/figures/analysis/examples_raw_merged.png"))
 
     print("\n" + "="*70)
     print("Generated files:")
-    print("  /home/danbel1kov/predictive-nav-mppi/examples_benchmark.png")
-    print("  /home/danbel1kov/predictive-nav-mppi/examples_raw_merged.png")
+    print("  ./docs/figures/analysis/examples_benchmark.png")
+    print("  ./docs/figures/analysis/examples_raw_merged.png")
     print("="*70)
