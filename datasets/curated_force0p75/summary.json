@@ -1,0 +1,103 @@
+{
+  "created_at_utc": "2026-05-17T19:17:11.937244+00:00",
+  "inputs": [
+    "/home/danbel1kov/predictive-nav-mppi/datasets/people_force0p75/long_corridor.json",
+    "/home/danbel1kov/predictive-nav-mppi/datasets/people_force0p75/nonlinear_corridor.json",
+    "/home/danbel1kov/predictive-nav-mppi/datasets/people_force0p75/labyrinth_turns.json"
+  ],
+  "config": {
+    "obs_len": 8,
+    "obs_dt": 0.4,
+    "pred_len": 12,
+    "pred_dt": 0.4,
+    "stride": 5,
+    "neighbor_radius": 2.0,
+    "max_neighbors": 16,
+    "holdout_fraction": 0.25,
+    "train_target": 0,
+    "benchmark_target": 0,
+    "min_gap_frames": 15,
+    "max_linear_fraction": 0.35,
+    "min_robot_window_path_len": 0.05,
+    "min_robot_pred_path_len": 0.05
+  },
+  "candidates": {
+    "total": 62825,
+    "by_partition": {
+      "train": 46915,
+      "benchmark": 15910
+    },
+    "tag_counts": {
+      "train": {
+        "all": 46915,
+        "complex": 14400,
+        "dense_interaction": 9996,
+        "interaction": 24062,
+        "linear": 24763,
+        "stop_go": 1635,
+        "turning": 17614
+      },
+      "benchmark": {
+        "all": 15910,
+        "complex": 5660,
+        "dense_interaction": 3581,
+        "interaction": 8242,
+        "linear": 7750,
+        "stop_go": 577,
+        "turning": 6727
+      }
+    },
+    "source_counts": {
+      "train": {
+        "labyrinth_turns": 9249,
+        "long_corridor": 28133,
+        "nonlinear_corridor": 9533
+      },
+      "benchmark": {
+        "labyrinth_turns": 3005,
+        "long_corridor": 9934,
+        "nonlinear_corridor": 2971
+      }
+    }
+  },
+  "selected": {
+    "train": {
+      "count": 13615,
+      "avg_score": 4.393104,
+      "tag_counts": {
+        "all": 13615,
+        "complex": 4783,
+        "dense_interaction": 3112,
+        "interaction": 6872,
+        "linear": 6577,
+        "stop_go": 681,
+        "turning": 5783
+      },
+      "source_counts": {
+        "labyrinth_turns": 2628,
+        "long_corridor": 8280,
+        "nonlinear_corridor": 2707
+      },
+      "linear_cases": 6577
+    },
+    "benchmark": {
+      "count": 4633,
+      "avg_score": 4.726223,
+      "tag_counts": {
+        "all": 4633,
+        "complex": 1859,
+        "dense_interaction": 1105,
+        "interaction": 2378,
+        "linear": 2069,
+        "stop_go": 245,
+        "turning": 2181
+      },
+      "source_counts": {
+        "labyrinth_turns": 848,
+        "long_corridor": 2939,
+        "nonlinear_corridor": 846
+      },
+      "linear_cases": 2069
+    }
+  }
+}

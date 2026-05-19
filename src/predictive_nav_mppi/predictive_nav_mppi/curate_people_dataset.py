@@ -39,9 +39,10 @@ class Candidate:
     metrics: Dict[str, float]
     score: float
     partition: str
+    robot_obs_xy: Optional[np.ndarray] = None
 
     def to_json(self) -> Dict[str, Any]:
-        return {
+        payload = {
             "case_id": self.case_id,
             "source_name": self.source_name,
             "source_path": self.source_path,
@@ -56,6 +57,9 @@ class Candidate:
             "score": round(self.score, 6),
             "partition": self.partition,
         }
+        if self.robot_obs_xy is not None:
+            payload["robot_obs_xy"] = np.round(self.robot_obs_xy, 6).tolist()
+        return payload
 
 
 def _dataset_name(path: Path) -> str:
@@ -79,8 +83,27 @@ def _build_track_map(frames: Sequence[Dict[str, Any]]) -> Dict[int, np.ndarray]:
     }
 
 
+def _build_robot_track(frames: Sequence[Dict[str, Any]]) -> Optional[np.ndarray]:
+    samples: List[Tuple[float, float, float]] = []
+    for fr in frames:
+        robot = fr.get("robot")
+        if robot is None:
+            continue
+        samples.append((float(fr["t"]), float(robot["x"]), float(robot["y"])))
+    if len(samples) < 2:
+        return None
+    samples.sort(key=lambda item: item[0])
+    return np.asarray(samples, dtype=np.float64)
+
+
+def _path_length(xy: np.ndarray) -> float:
+    if xy.shape[0] < 2:
+        return 0.0
+    return float(np.sum(np.linalg.norm(xy[1:] - xy[:-1], axis=1)))
+
+
 def _candidate_metrics(obs_xy: np.ndarray, neigh_xy: List[np.ndarray], obs_dt: float) -> Dict[str, float]:
-    path_len = float(np.sum(np.linalg.norm(obs_xy[1:] - obs_xy[:-1], axis=1))) if obs_xy.shape[0] >= 2 else 0.0
+    path_len = _path_length(obs_xy)
     displacement = float(np.linalg.norm(obs_xy[-1] - obs_xy[0])) if obs_xy.shape[0] >= 2 else 0.0
     speeds = _speed_magnitudes(obs_xy, obs_dt)
     heading_change_deg = math.degrees(_heading_change(obs_xy))
@@ -94,6 +117,7 @@ def _candidate_metrics(obs_xy: np.ndarray, neigh_xy: List[np.ndarray], obs_dt: f
         "heading_change_deg": heading_change_deg,
         "neighbor_count": float(len(neigh_xy)),
         "min_neighbor_distance": float(min_neighbor_distance if math.isfinite(min_neighbor_distance) else 999.0),
+        "min_speed": float(np.min(speeds)) if speeds.size else 0.0,
         "mean_speed": float(np.mean(speeds)) if speeds.size else 0.0,
         "max_speed": float(np.max(speeds)) if speeds.size else 0.0,
     }
@@ -119,16 +143,7 @@ def _candidate_score(tags: Set[str], metrics: Dict[str, float]) -> float:
 
 
 def _is_linear_case(candidate: Candidate, turn_threshold_deg: float) -> bool:
-    if candidate.metrics["neighbor_count"] > 0.0:
-        return False
-    if "interaction" in candidate.tags or "dense_interaction" in candidate.tags:
-        return False
-    if "turning" in candidate.tags or "complex" in candidate.tags or "very_complex" in candidate.tags:
-        return False
-    return (
-        candidate.metrics["heading_change_deg"] < max(12.0, 0.35 * turn_threshold_deg)
-        and candidate.metrics["curvature_ratio"] < 1.05
-    )
+    return "linear" in candidate.tags
 
 
 def _build_candidates_for_dataset(
@@ -147,10 +162,15 @@ def _build_candidates_for_dataset(
     stop_speed_thresh: float,
     moving_speed_min: float,
     stop_go_delta: float,
+    near_robot_radius: float,
+    near_robot_fov_deg: float,
+    min_robot_window_path_len: float,
+    min_robot_pred_path_len: float,
 ) -> List[Candidate]:
     payload = json.loads(dataset_path.read_text())
     frames = payload["frames"]
     track_map = _build_track_map(frames)
+    robot_track = _build_robot_track(frames)
     dataset_name = _dataset_name(dataset_path)
     total_frames = len(frames)
     out: List[Candidate] = []
@@ -159,6 +179,7 @@ def _build_candidates_for_dataset(
         fr = frames[frame_index]
         t0 = float(fr["t"])
         present = fr["people"]
+        robot_now = fr.get("robot")
         by_id = {int(person["id"]): person for person in present}
         ids = list(by_id.keys())
         partition = "benchmark" if frame_index >= int((1.0 - holdout_fraction) * total_frames) else "train"
@@ -170,9 +191,42 @@ def _build_candidates_for_dataset(
             gt_xy = _sample_gt(track, t0, pred_len, pred_dt)
             if obs_xy is None or gt_xy is None:
                 continue
+            robot_obs_xy = _sample_obs(robot_track, t0, obs_len, obs_dt) if robot_track is not None else None
+            robot_window_path_len = 0.0
+            robot_pred_path_len = 0.0
+            if min_robot_window_path_len > 0.0 or min_robot_pred_path_len > 0.0:
+                if robot_track is None:
+                    continue
+                robot_gt_xy = _sample_gt(robot_track, t0, pred_len, pred_dt)
+                if robot_obs_xy is None or robot_gt_xy is None:
+                    continue
+                if min_robot_window_path_len > 0.0:
+                    robot_window_path_len = _path_length(np.vstack([robot_obs_xy, robot_gt_xy]))
+                if min_robot_pred_path_len > 0.0:
+                    robot_pred_path_len = _path_length(robot_gt_xy)
+                if min_robot_window_path_len > 0.0 and robot_window_path_len < min_robot_window_path_len:
+                    continue
+                if min_robot_pred_path_len > 0.0 and robot_pred_path_len < min_robot_pred_path_len:
+                    continue
 
             px = float(by_id[pid]["x"])
             py = float(by_id[pid]["y"])
+            if near_robot_radius > 0.0:
+                if robot_now is None:
+                    continue
+                rx = float(robot_now["x"])
+                ry = float(robot_now["y"])
+                ryaw = float(robot_now["yaw"])
+                dx = px - rx
+                dy = py - ry
+                if math.hypot(dx, dy) > near_robot_radius:
+                    continue
+                if near_robot_fov_deg < 360.0:
+                    bearing = math.atan2(dy, dx) - ryaw
+                    bearing = (bearing + math.pi) % (2.0 * math.pi) - math.pi
+                    if abs(bearing) > math.radians(near_robot_fov_deg * 0.5):
+                        continue
+
             neigh_xy: List[np.ndarray] = []
             for oid in ids:
                 if oid == pid:
@@ -203,6 +257,8 @@ def _build_candidates_for_dataset(
                 moving_speed_min=moving_speed_min,
             )
             metrics = _candidate_metrics(obs_xy, neigh_xy, obs_dt)
+            metrics["robot_window_path_len"] = robot_window_path_len
+            metrics["robot_pred_path_len"] = robot_pred_path_len
             score = _candidate_score(tags, metrics)
             out.append(
                 Candidate(
@@ -219,6 +275,7 @@ def _build_candidates_for_dataset(
                     metrics=metrics,
                     score=score,
                     partition=partition,
+                    robot_obs_xy=robot_obs_xy,
                 )
             )
     return out
@@ -268,6 +325,7 @@ def _compose_selection(
     bucket_weights: Sequence[Tuple[Optional[str], float]],
     max_linear_fraction: float,
     turn_threshold_deg: float,
+    source_quota: Optional[Dict[str, int]] = None,
 ) -> List[Candidate]:
     if not candidates:
         return []
@@ -292,6 +350,7 @@ def _compose_selection(
     selected: List[Candidate] = []
     selected_ids: Set[str] = set()
     selected_by_track: Dict[Tuple[str, int], List[int]] = defaultdict(list)
+    source_counts: Counter[str] = Counter()
 
     def add_from_pool(pool: Sequence[Candidate], count: int) -> None:
         for cand in pool:
@@ -299,11 +358,16 @@ def _compose_selection(
                 return
             if cand.case_id in selected_ids:
                 continue
+            if source_quota is not None:
+                cap = source_quota.get(cand.source_name)
+                if cap is not None and source_counts[cand.source_name] >= cap:
+                    continue
             if not _can_take(cand, selected_by_track, min_gap_frames):
                 continue
             selected.append(cand)
             selected_ids.add(cand.case_id)
             selected_by_track[(cand.source_name, cand.person_id)].append(cand.frame_index)
+            source_counts[cand.source_name] += 1
             count -= 1
 
     for bucket_tag, weight in bucket_weights:
@@ -363,6 +427,8 @@ def _summary_payload(
             "benchmark_target": args.benchmark_target,
             "min_gap_frames": args.min_gap_frames,
             "max_linear_fraction": args.max_linear_fraction,
+            "min_robot_window_path_len": args.min_robot_window_path_len,
+            "min_robot_pred_path_len": args.min_robot_pred_path_len,
         },
         "candidates": {
             "total": len(all_candidates),
@@ -456,6 +522,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--holdout_fraction", type=float, default=0.25)
     parser.add_argument("--train_target", type=int, default=0, help="0 means keep all filtered train cases.")
     parser.add_argument("--benchmark_target", type=int, default=0, help="0 means keep all filtered benchmark cases.")
+    parser.add_argument("--source_quota", type=str, default="",
+                        help="Per-source caps for TRAIN cases as 'source=N,source=N,...'. Example: 'long_corridor_react_better_rft=8000,v5loop_long_corridor=7700'. Sources without a cap are unlimited.")
     parser.add_argument("--min_gap_frames", type=int, default=15)
     parser.add_argument(
         "--max_linear_fraction",
@@ -469,6 +537,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stop_speed_thresh", type=float, default=0.10)
     parser.add_argument("--moving_speed_min", type=float, default=0.25)
     parser.add_argument("--stop_go_delta", type=float, default=0.25)
+    parser.add_argument("--near_robot_radius", type=float, default=0.0,
+                        help="If >0, keep only cases whose person is within this radius from the robot at the anchor frame.")
+    parser.add_argument("--near_robot_fov_deg", type=float, default=360.0,
+                        help="Robot field of view for near-robot filtering; ignored when radius <= 0.")
+    parser.add_argument("--min_robot_window_path_len", type=float, default=0.05,
+                        help="Drop cases where the robot moves less than this many meters over obs+pred. Set 0 to disable.")
+    parser.add_argument("--min_robot_pred_path_len", type=float, default=0.05,
+                        help="Drop cases where the robot moves less than this many meters over the future pred window. Set 0 to disable.")
     return parser.parse_args()
 
 
@@ -497,6 +573,10 @@ def main() -> None:
                 stop_speed_thresh=args.stop_speed_thresh,
                 moving_speed_min=args.moving_speed_min,
                 stop_go_delta=args.stop_go_delta,
+                near_robot_radius=args.near_robot_radius,
+                near_robot_fov_deg=args.near_robot_fov_deg,
+                min_robot_window_path_len=args.min_robot_window_path_len,
+                min_robot_pred_path_len=args.min_robot_pred_path_len,
             )
         )
 
@@ -520,6 +600,16 @@ def main() -> None:
         (None, 0.10),
     )
 
+    source_quota_map: Optional[Dict[str, int]] = None
+    if args.source_quota.strip():
+        source_quota_map = {}
+        for token in args.source_quota.split(","):
+            token = token.strip()
+            if not token or "=" not in token:
+                continue
+            k, v = token.split("=", 1)
+            source_quota_map[k.strip()] = int(v.strip())
+
     train_cases = _compose_selection(
         candidates=train_pool,
         target_count=args.train_target,
@@ -527,6 +617,7 @@ def main() -> None:
         bucket_weights=train_weights,
         max_linear_fraction=args.max_linear_fraction,
         turn_threshold_deg=args.turn_threshold_deg,
+        source_quota=source_quota_map,
     )
     benchmark_cases = _compose_selection(
         candidates=benchmark_pool,

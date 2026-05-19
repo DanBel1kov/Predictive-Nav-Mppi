@@ -307,6 +307,8 @@ def build_residual_features(
     obs_dt: float,
     k_neighbors: int,
     scene_patch: np.ndarray,
+    robot_obs_xy: np.ndarray | None = None,
+    include_robot: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     obs_xy = np.asarray(obs_xy, dtype=np.float32)
     kalman_pred_xy = np.asarray(kalman_pred_xy, dtype=np.float32)
@@ -323,8 +325,10 @@ def build_residual_features(
     heading_delta = _heading_delta(obs_local)
     target_seq = np.concatenate([obs_local, vel_local, speed, acc_local, heading_delta], axis=1).astype(np.float32)
 
-    neigh_seq = np.zeros((k_neighbors, obs_local.shape[0], 5), dtype=np.float32)
-    neigh_mask = np.zeros((k_neighbors,), dtype=np.float32)
+    feat_dim = 6 if include_robot else 5
+    total_slots = (k_neighbors + 1) if include_robot else k_neighbors
+    neigh_seq = np.zeros((total_slots, obs_local.shape[0], feat_dim), dtype=np.float32)
+    neigh_mask = np.zeros((total_slots,), dtype=np.float32)
     target_vel_now = vel_local[-1]
     num_r1 = 0.0
     num_r2 = 0.0
@@ -360,12 +364,34 @@ def build_residual_features(
             [neigh_local, neigh_vel, np.linalg.norm(neigh_vel, axis=1, keepdims=True).astype(np.float32)],
             axis=1,
         ).astype(np.float32)
+        if include_robot:
+            neigh_feat = np.concatenate(
+                [neigh_feat, np.zeros((neigh_feat.shape[0], 1), dtype=np.float32)],
+                axis=1,
+            )
         ranked_neighbors.append((dist, neigh_feat))
 
     ranked_neighbors.sort(key=lambda item: item[0])
+    base_offset = 1 if include_robot else 0
     for i, (_, feat) in enumerate(ranked_neighbors[:k_neighbors]):
-        neigh_seq[i] = feat
-        neigh_mask[i] = 1.0
+        neigh_seq[base_offset + i] = feat
+        neigh_mask[base_offset + i] = 1.0
+
+    if include_robot:
+        if robot_obs_xy is not None:
+            robot_local = _to_local(np.asarray(robot_obs_xy, dtype=np.float32), origin, rot)
+            robot_vel, _ = _speed_and_acc(robot_local, obs_dt)
+            robot_feat = np.concatenate(
+                [
+                    robot_local,
+                    robot_vel,
+                    np.linalg.norm(robot_vel, axis=1, keepdims=True).astype(np.float32),
+                    np.ones((robot_local.shape[0], 1), dtype=np.float32),
+                ],
+                axis=1,
+            ).astype(np.float32)
+            neigh_seq[0] = robot_feat
+            neigh_mask[0] = 1.0
 
     social_summary = np.asarray(
         [
@@ -408,6 +434,8 @@ def predict_residual_world(
     scene_source_name: str = "",
     scene_patch_cfg: ScenePatchConfig | None = None,
     scene_map_yaml: str = "",
+    robot_obs_xy: np.ndarray | None = None,
+    include_robot: bool = False,
 ) -> np.ndarray:
     if not TORCH_AVAILABLE:
         raise RuntimeError("PyTorch is required. Install torch.")
@@ -443,6 +471,8 @@ def predict_residual_world(
             obs_dt=obs_dt,
             k_neighbors=k_neighbors,
             scene_patch=scene_patch,
+            robot_obs_xy=robot_obs_xy,
+            include_robot=include_robot,
         )
     else:
         dummy_scene = np.zeros((1, 1, 1), dtype=np.float32)
@@ -453,6 +483,8 @@ def predict_residual_world(
             obs_dt=obs_dt,
             k_neighbors=k_neighbors,
             scene_patch=dummy_scene,
+            robot_obs_xy=robot_obs_xy,
+            include_robot=include_robot,
         )
     with torch.no_grad():
         if expects_scene:

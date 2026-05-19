@@ -1,0 +1,17 @@
+diff --git a/hunav_agent_manager/src/agent_manager.cpp b/hunav_agent_manager/src/agent_manager.cpp
+--- a/hunav_agent_manager/src/agent_manager.cpp
++++ b/hunav_agent_manager/src/agent_manager.cpp
+@@ -1499,5 +1499,13 @@ void AgentManager::computeForces(int id)
+         agents_[id].sfmAgent.forces.desiredForce + agents_[id].sfmAgent.forces.socialForce +
+         agents_[id].sfmAgent.forces.obstacleForce + agents_[id].sfmAgent.forces.groupForce;
+   }
++  // Rebuild globalForce after local post-processing. The robot contribution is
++  // added to socialForce after SFM.computeForces(), so the globalForce computed
++  // inside SFM would otherwise stay stale and updatePosition() would not move
++  // pedestrians according to robotSocialForce.
++  agents_[id].sfmAgent.forces.globalForce =
++      agents_[id].sfmAgent.forces.desiredForce + agents_[id].sfmAgent.forces.socialForce +
++      agents_[id].sfmAgent.forces.obstacleForce + agents_[id].sfmAgent.forces.groupForce;
++
+   // if(id == 1)
+   // {

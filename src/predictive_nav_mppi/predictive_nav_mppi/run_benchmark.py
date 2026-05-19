@@ -58,6 +58,7 @@ def _launch_sim(
     residual_alpha: float = 0.3,
     residual_smoothing_beta: float = 0.8,
     residual_clip_norm: float = 0.35,
+    residual_away_clip_norm: float = 0.0,
     residual_turn_gate_enable: bool = True,
     residual_turn_gate_tau: float = 0.1,
     residual_turn_gate_alpha: float = 30.0,
@@ -65,6 +66,7 @@ def _launch_sim(
     social_vae_ckpt_path: str = "",
     social_vae_config_path: str = "",
     social_vae_pred_samples: int = 20,
+    humans_ignore_robot: bool = False,
     robot_force_scale: float = 0.0,
     predict_robot_as_agent: bool = False,
     sim_log_path: str = "",
@@ -74,11 +76,13 @@ def _launch_sim(
         f"scenario:={scenario}",
         f"mppi_mode:={mppi_mode}",
         f"gui:={'True' if gui else 'False'}",
+        "gzclient:=False",
+        "nav2_minimal:=True",
         f"sim_speedup:={float(sim_speedup)}",
         f"sim_max_step_size:={float(sim_max_step_size)}",
         f"sim_real_time_update_rate:={float(sim_real_time_update_rate)}",
         "use_hunav:=True",
-        "humans_ignore_robot:=True",
+        f"humans_ignore_robot:={'True' if humans_ignore_robot else 'False'}",
         "publish_initial_pose:=False",
         f"predictor_type:={predictor_type}",
     ]
@@ -87,6 +91,7 @@ def _launch_sim(
         cmd.append(f"residual_alpha:={float(residual_alpha)}")
         cmd.append(f"residual_smoothing_beta:={float(residual_smoothing_beta)}")
         cmd.append(f"residual_clip_norm:={float(residual_clip_norm)}")
+        cmd.append(f"residual_away_clip_norm:={float(residual_away_clip_norm)}")
         cmd.append(f"residual_turn_gate_enable:={'True' if residual_turn_gate_enable else 'False'}")
         cmd.append(f"residual_turn_gate_tau:={float(residual_turn_gate_tau)}")
         cmd.append(f"residual_turn_gate_alpha:={float(residual_turn_gate_alpha)}")
@@ -319,10 +324,16 @@ def main():
     parser.add_argument("--config", required=True, help="Path to benchmark_config.yaml")
     parser.add_argument("--mppi-mode", type=str, help="Override mppi_mode (custom/standard)")
     parser.add_argument("--predictor", type=str, help="Override predictor_type (kalman/residual/model/social_vae)")
+    parser.add_argument("--residual-weights", type=str, help="Override residual_model_weights path")
     parser.add_argument("--residual-alpha", type=float, help="Override residual_alpha")
     parser.add_argument("--residual-beta", type=float, help="Override residual_smoothing_beta")
     parser.add_argument("--residual-clip", type=float, help="Override residual_clip_norm")
+    parser.add_argument("--residual-away-clip", type=float, help="Override residual_away_clip_norm")
     parser.add_argument("--repeats", type=int, help="Override repeats")
+    parser.add_argument("--humans-ignore-robot", action="store_true", default=None,
+                        help="Force pedestrians to ignore the robot completely")
+    parser.add_argument("--humans-react-to-robot", dest="humans_ignore_robot", action="store_false",
+                        help="Force pedestrians to react to the robot")
     parser.add_argument("--robot-force-scale", type=float,
                         help="Override robot_force_scale (0.0=invisible, 1.0=full reaction)")
     parser.add_argument("--predict-robot-as-agent", action="store_true", default=None,
@@ -343,8 +354,12 @@ def main():
         cfg["residual_smoothing_beta"] = args.residual_beta
     if args.residual_clip is not None:
         cfg["residual_clip_norm"] = args.residual_clip
+    if args.residual_away_clip is not None:
+        cfg["residual_away_clip_norm"] = args.residual_away_clip
     if args.repeats is not None:
         cfg["repeats"] = args.repeats
+    if args.humans_ignore_robot is not None:
+        cfg["humans_ignore_robot"] = args.humans_ignore_robot
     if args.robot_force_scale is not None:
         cfg["robot_force_scale"] = args.robot_force_scale
     if args.predict_robot_as_agent:
@@ -358,9 +373,12 @@ def main():
     if predictor_type == "social_gru":
         predictor_type = "model"
     residual_model_weights = str(cfg.get("residual_model_weights", "")).strip()
+    if getattr(args, "residual_weights", None):
+        residual_model_weights = str(args.residual_weights).strip()
     residual_alpha = float(cfg.get("residual_alpha", 0.3))
     residual_smoothing_beta = float(cfg.get("residual_smoothing_beta", 0.8))
     residual_clip_norm = float(cfg.get("residual_clip_norm", 0.35))
+    residual_away_clip_norm = float(cfg.get("residual_away_clip_norm", 0.0))
     residual_turn_gate_enable = bool(cfg.get("residual_turn_gate_enable", True))
     residual_turn_gate_tau = float(cfg.get("residual_turn_gate_tau", 0.1))
     residual_turn_gate_alpha = float(cfg.get("residual_turn_gate_alpha", 30.0))
@@ -369,6 +387,7 @@ def main():
     social_vae_ckpt_path = str(cfg.get("social_vae_ckpt_path", "")).strip()
     social_vae_config_path = str(cfg.get("social_vae_config_path", "")).strip()
     social_vae_pred_samples = int(cfg.get("social_vae_pred_samples", 20))
+    humans_ignore_robot = bool(cfg.get("humans_ignore_robot", False))
     robot_force_scale = float(cfg.get("robot_force_scale", 0.0))
     predict_robot_as_agent = bool(cfg.get("predict_robot_as_agent", False))
 
@@ -460,6 +479,7 @@ def main():
         residual_alpha=residual_alpha,
         residual_smoothing_beta=residual_smoothing_beta,
         residual_clip_norm=residual_clip_norm,
+        residual_away_clip_norm=residual_away_clip_norm,
         residual_turn_gate_enable=residual_turn_gate_enable,
         residual_turn_gate_tau=residual_turn_gate_tau,
         residual_turn_gate_alpha=residual_turn_gate_alpha,
@@ -467,6 +487,7 @@ def main():
         social_vae_ckpt_path=social_vae_ckpt_path,
         social_vae_config_path=social_vae_config_path,
         social_vae_pred_samples=social_vae_pred_samples,
+        humans_ignore_robot=humans_ignore_robot,
         robot_force_scale=robot_force_scale,
         predict_robot_as_agent=predict_robot_as_agent,
         sim_log_path=sim_log_path,
@@ -550,9 +571,14 @@ def main():
             ("Time-to-goal  (s)", "time_to_goal"),
             ("Path length   (m)", "path_length"),
             ("Min distance  (m)", "min_dist"),
+            ("Avg distance  (m)", "avg_dist"),
             ("Collisions      ", "collision_count"),
             ("Violation time(s)", "viol_time"),
             ("Robot influence ", "avg_robot_influence"),
+            ("Nearest rob infl", "nearest_robot_influence"),
+            ("Peak rob infl   ", "peak_robot_influence"),
+            ("Close rob infl  ", "close_robot_influence"),
+            ("Robot infl AUC  ", "robot_influence_auc"),
         ]:
             s = _stats([r[key] for r in ok])
             print(f"    {label}:  "

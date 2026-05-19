@@ -27,9 +27,14 @@ METRICS = [
     ("time_to_goal", "lower"),
     ("path_length", "lower"),
     ("min_dist", "higher"),
+    ("avg_dist", "higher"),
     ("collision_count", "lower"),
     ("viol_time", "lower"),
     ("avg_robot_influence", "lower"),
+    ("nearest_robot_influence", "lower"),
+    ("peak_robot_influence", "lower"),
+    ("close_robot_influence", "lower"),
+    ("robot_influence_auc", "lower"),
 ]
 
 
@@ -139,6 +144,15 @@ def _variant_id(mode, predictor, args):
             f"b{args.residual_beta:g}",
             f"c{args.residual_clip:g}",
         ])
+        if float(getattr(args, "residual_away_clip", 0.0) or 0.0) > 0.0:
+            parts.append(f"away{args.residual_away_clip:g}")
+        tag = getattr(args, "residual_tag", "") or ""
+        if tag:
+            parts.append(tag)
+    if predictor == "social_vae":
+        tag = getattr(args, "social_vae_tag", "") or ""
+        if tag:
+            parts.append(tag)
     return "_".join(parts).replace(".", "p").replace("-", "m")
 
 
@@ -170,8 +184,14 @@ def _study_id(base_cfg, args):
     if args.study_name:
         return args.study_name
     goals_sig = _goal_signature(bench.get("goals", []))
+    humans_ignore_robot = (
+        bool(args.humans_ignore_robot)
+        if args.humans_ignore_robot is not None
+        else bool(bench.get("humans_ignore_robot", True))
+    )
     parts = [
         str(bench.get("scenario", "scenario")),
+        f"ignore{int(humans_ignore_robot)}",
         f"force{args.robot_force_scale:g}",
         f"predrobot{int(args.predict_robot_as_agent)}",
         f"goals{goals_sig}",
@@ -224,6 +244,10 @@ def _variant_config(base_cfg, args, mode, predictor, repeat, missing_goal_indice
 
     bench["mppi_mode"] = mode
     bench["predictor_type"] = predictor
+    if args.humans_ignore_robot is not None:
+        bench["humans_ignore_robot"] = bool(args.humans_ignore_robot)
+    else:
+        bench["humans_ignore_robot"] = bool(base_cfg["benchmark"].get("humans_ignore_robot", True))
     bench["robot_force_scale"] = float(args.robot_force_scale)
     bench["predict_robot_as_agent"] = bool(args.predict_robot_as_agent)
     bench["repeats"] = 1
@@ -242,6 +266,22 @@ def _variant_config(base_cfg, args, mode, predictor, repeat, missing_goal_indice
         bench["residual_alpha"] = float(args.residual_alpha)
         bench["residual_smoothing_beta"] = float(args.residual_beta)
         bench["residual_clip_norm"] = float(args.residual_clip)
+        bench["residual_away_clip_norm"] = float(args.residual_away_clip)
+        if getattr(args, "residual_weights", ""):
+            bench["residual_model_weights"] = str(args.residual_weights)
+        if getattr(args, "residual_turn_gate", None) is not None:
+            bench["residual_turn_gate_enable"] = bool(args.residual_turn_gate)
+        if args.residual_turn_gate_tau is not None:
+            bench["residual_turn_gate_tau"] = float(args.residual_turn_gate_tau)
+        if args.residual_turn_gate_alpha is not None:
+            bench["residual_turn_gate_alpha"] = float(args.residual_turn_gate_alpha)
+    if predictor == "social_vae":
+        if getattr(args, "social_vae_ckpt", ""):
+            bench["social_vae_ckpt_path"] = str(args.social_vae_ckpt)
+        if getattr(args, "social_vae_config", ""):
+            bench["social_vae_config_path"] = str(args.social_vae_config)
+        if getattr(args, "social_vae_repo", ""):
+            bench["social_vae_repo_path"] = str(args.social_vae_repo)
 
     return cfg
 
@@ -421,6 +461,10 @@ def main():
                         help="Total episodes per variant; must be divisible by number of goals")
     parser.add_argument("--study-name", default="", help="Stable cache directory name")
     parser.add_argument("--output-root", default="benchmark_paired")
+    parser.add_argument("--humans-ignore-robot", action="store_true", default=None,
+                        help="Force pedestrians to ignore the robot completely")
+    parser.add_argument("--humans-react-to-robot", dest="humans_ignore_robot", action="store_false",
+                        help="Force pedestrians to react to the robot")
 
     parser.add_argument("--left-mode", required=True, help="custom or standard")
     parser.add_argument("--left-predictor", required=True, help="kalman or residual")
@@ -431,9 +475,31 @@ def main():
     parser.add_argument("--predict-robot-as-agent", action="store_true",
                         help="Also inject robot into the people predictor input")
 
+    parser.add_argument("--residual-weights", type=str, default="",
+                        help="Override residual_model_weights path (default: from yaml).")
+    parser.add_argument("--social-vae-ckpt", type=str, default="",
+                        help="Override social_vae_ckpt_path (default: from yaml).")
+    parser.add_argument("--social-vae-config", type=str, default="",
+                        help="Override social_vae_config_path (default: from yaml).")
+    parser.add_argument("--social-vae-repo", type=str, default="",
+                        help="Override social_vae_repo_path (default: from yaml).")
+    parser.add_argument("--residual-tag", type=str, default="",
+                        help="Suffix added to variant_id (e.g. 'v4safety'). Allows multiple residual models in one study without cache collision.")
+    parser.add_argument("--social-vae-tag", type=str, default="",
+                        help="Suffix added to variant_id for social_vae predictor (e.g. 'stable'). Allows multiple VAE ckpts in one study without cache collision.")
     parser.add_argument("--residual-alpha", type=float, default=0.3)
     parser.add_argument("--residual-beta", type=float, default=0.8)
     parser.add_argument("--residual-clip", type=float, default=0.35)
+    parser.add_argument("--residual-away-clip", type=float, default=0.0,
+                        help="Clip only the outward-from-robot radial residual component; 0 disables.")
+    parser.add_argument("--residual-turn-gate", action="store_true", default=None,
+                        help="Force turn-gate ON.")
+    parser.add_argument("--no-residual-turn-gate", dest="residual_turn_gate", action="store_false",
+                        help="Force turn-gate OFF.")
+    parser.add_argument("--residual-turn-gate-tau", type=float, default=None,
+                        help="Override residual_turn_gate_tau in the benchmark config.")
+    parser.add_argument("--residual-turn-gate-alpha", type=float, default=None,
+                        help="Override residual_turn_gate_alpha in the benchmark config.")
 
     parser.add_argument("--sim-speedup", type=float)
     parser.add_argument("--sim-max-step-size", type=float)
@@ -480,6 +546,11 @@ def main():
         "episodes_per_variant": args.episodes,
         "repeats": target_repeats,
         "goals": len(goals),
+        "humans_ignore_robot": (
+            bool(args.humans_ignore_robot)
+            if args.humans_ignore_robot is not None
+            else bool(bench.get("humans_ignore_robot", True))
+        ),
         "robot_force_scale": args.robot_force_scale,
         "predict_robot_as_agent": args.predict_robot_as_agent,
         "variants": [left[2], right[2]],

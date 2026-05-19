@@ -223,7 +223,7 @@ Visualization Manager:
         Value: /plan
       Value: true
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
+      Enabled: false
       Name: MPPI Rollouts
       Namespaces:
         mppi_rollouts: true
@@ -233,7 +233,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /mppi_debug_rollouts
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: Predicted People Markers

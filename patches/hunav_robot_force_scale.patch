@@ -1,0 +1,99 @@
+--- a/hunav_agent_manager/src/agent_manager.cpp
++++ b/hunav_agent_manager/src/agent_manager.cpp
+@@ -1383,37 +1383,54 @@ std::vector<sfm::Agent> AgentManager::getSFMAgents()
+     switch (agents_[id].behavior.type)
+     {
+       case hunav_msgs::msg::AgentBehavior::BEH_REGULAR:
+-        sfm::Agent scaledRobot = robot_.sfmAgent;
+-        scaledRobot.params.forceFactorSocial *= robot_force_scale_;
+-        std::vector<sfm::Agent> otherAgentsWithRobot = otherAgents;
+-        otherAgentsWithRobot.push_back(scaledRobot);
+-        sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgentsWithRobot);
++        // With zero robot force scale the robot must be fully ignored.
++        if (robot_force_scale_ <= 0.0)
++        {
++          sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
++          agents_[id].sfmAgent.forces.robotSocialForce.set(0.0, 0.0);
++        }
++        else
++        {
++          // Compute forces from pedestrians only (no robot).
++          sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
++
++          // Compute robot contribution at full scale (using the pedestrian's own
++          // forceFactorSocial, as the SFM formula uses the observing agent's factor).
++          // Then multiply the resulting force vector by robot_force_scale_.
++          // NOTE: scaling robot_.sfmAgent.params.forceFactorSocial does NOT work because
++          // SFM uses me.params.forceFactorSocial (the pedestrian's factor), not the robot's.
++          utils::Vector2d robotContrib(0.0, 0.0);
++          {
++            sfm::Agent tmp = agents_[id].sfmAgent;
++            tmp.forces.socialForce.set(0.0, 0.0);
++            std::vector<sfm::Agent> robotOnly = {robot_.sfmAgent};
++            sfm::SFM.computeForces(tmp, robotOnly);
++            robotContrib = tmp.forces.socialForce * robot_force_scale_;
++          }
++
++          // Add scaled robot contribution to the total social force.
++          agents_[id].sfmAgent.forces.socialForce += robotContrib;
++          agents_[id].sfmAgent.forces.robotSocialForce = robotContrib;
++        }
+         break;
+       case hunav_msgs::msg::AgentBehavior::BEH_IMPASSIVE:
+-        // the human treats the robot like an obstacle.
+-        // We add the robot to the obstacles of this agent.
+-        ob.set(robot_.sfmAgent.position.getX(), robot_.sfmAgent.position.getY());
+-        agents_[id].sfmAgent.obstacles1.push_back(ob);
+-        sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
++        if (robot_force_scale_ <= 0.0)
++        {
++          sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
++          agents_[id].sfmAgent.forces.robotSocialForce.set(0.0, 0.0);
++        }
++        else
++        {
++          // the human treats the robot like an obstacle.
++          // We add the robot to the obstacles of this agent.
++          ob.set(robot_.sfmAgent.position.getX(), robot_.sfmAgent.position.getY());
++          agents_[id].sfmAgent.obstacles1.push_back(ob);
++          sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
++          agents_[id].sfmAgent.forces.robotSocialForce.set(0.0, 0.0);
++        }
+         break;
+       default:
+         // Compute forces as usual (not taking into account the robot)
+         sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
+     }
+@@ -1422,14 +1439,24 @@ std::vector<sfm::Agent> AgentManager::getSFMAgents()
+   else
+   {
+-    sfm::Agent scaledRobot = robot_.sfmAgent;
+-    scaledRobot.params.forceFactorSocial *= robot_force_scale_;
+-    std::vector<sfm::Agent> otherAgentsWithRobot = otherAgents;
+-    otherAgentsWithRobot.push_back(scaledRobot);
+-    sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgentsWithRobot);
++    if (robot_force_scale_ <= 0.0)
++    {
++      sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
++      agents_[id].sfmAgent.forces.robotSocialForce.set(0.0, 0.0);
++    }
++    else
++    {
++      // Compute forces from pedestrians only (no robot).
++      sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
++
++      // Scale the robot contribution by multiplying the result vector, not
++      // the robot's forceFactorSocial (which SFM doesn't use for pedestrian avoidance).
++      utils::Vector2d robotContrib(0.0, 0.0);
++      {
++        sfm::Agent tmp = agents_[id].sfmAgent;
++        tmp.forces.socialForce.set(0.0, 0.0);
++        std::vector<sfm::Agent> robotOnly = {robot_.sfmAgent};
++        sfm::SFM.computeForces(tmp, robotOnly);
++        robotContrib = tmp.forces.socialForce * robot_force_scale_;
++      }
++
++      agents_[id].sfmAgent.forces.socialForce += robotContrib;
++      agents_[id].sfmAgent.forces.robotSocialForce = robotContrib;
++    }
+   }

@@ -20,6 +20,7 @@ benchmark:
   social_vae_pred_samples: 20
   robot_model_name: waffle
   repeats: 1
+  humans_ignore_robot: true
   robot_force_scale: 0.0   # 0.0 = люди игнорируют робота, 1.0 = полная реакция как на человека
   predict_robot_as_agent: false  # true = робот передаётся предиктору как сосед-пешеход
   reset_hunav_between_episodes: true
@@ -34,7 +35,7 @@ benchmark:
   sim_real_time_update_rate: 0.0
   startup_delay_sec: 15.0
   nav_timeout_sec: 180.0
-  settle_time_sec: 5.0
+  settle_time_sec: 15.0
   sample_rate_hz: 5.0
   cooldown_sec: 8.0
 

@@ -1,0 +1,90 @@
+diff --git a/hunav_agent_manager/src/agent_manager.cpp b/hunav_agent_manager/src/agent_manager.cpp
+index b486665..0000000 100644
+--- a/hunav_agent_manager/src/agent_manager.cpp
++++ b/hunav_agent_manager/src/agent_manager.cpp
+@@ -1380,16 +1384,50 @@ void AgentManager::computeForces(int id)
+     switch (agents_[id].behavior.type)
+     {
+       case hunav_msgs::msg::AgentBehavior::BEH_REGULAR:
+-        // We add the robot as another human agent.
+-        otherAgents.push_back(robot_.sfmAgent);
+-        sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
++        // With zero robot force scale the robot must be fully ignored.
++        if (robot_force_scale_ <= 0.0)
++        {
++          sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
++          agents_[id].sfmAgent.forces.robotSocialForce.set(0.0, 0.0);
++        }
++        else
++        {
++          // We add the robot as another human agent, with scaled social force.
++          sfm::Agent scaledRobot = robot_.sfmAgent;
++          scaledRobot.params.forceFactorSocial *= robot_force_scale_;
++
++          // Pass 1: robot only -> measures robot's social force contribution for metric.
++          utils::Vector2d robotContrib(0.0, 0.0);
++          {
++            sfm::Agent tmp = agents_[id].sfmAgent;
++            std::vector<sfm::Agent> robotOnly = {scaledRobot};
++            sfm::SFM.computeForces(tmp, robotOnly);
++            robotContrib = tmp.forces.socialForce;
++          }
++
++          // Pass 2: full computation with all agents.
++          otherAgents.push_back(scaledRobot);
++          sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
++          agents_[id].sfmAgent.forces.robotSocialForce = robotContrib;
++        }
+         break;
+       case hunav_msgs::msg::AgentBehavior::BEH_IMPASSIVE:
+-        // the human treats the robot like an obstacle.
+-        // We add the robot to the obstacles of this agent.
+-        ob.set(robot_.sfmAgent.position.getX(), robot_.sfmAgent.position.getY());
+-        agents_[id].sfmAgent.obstacles1.push_back(ob);
+-        sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
++        if (robot_force_scale_ <= 0.0)
++        {
++          sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
++          agents_[id].sfmAgent.forces.robotSocialForce.set(0.0, 0.0);
++        }
++        else
++        {
++          // the human treats the robot like an obstacle.
++          // We add the robot to the obstacles of this agent.
++          ob.set(robot_.sfmAgent.position.getX(), robot_.sfmAgent.position.getY());
++          agents_[id].sfmAgent.obstacles1.push_back(ob);
++          sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
++          agents_[id].sfmAgent.forces.robotSocialForce.set(0.0, 0.0);
++        }
+         break;
+       default:
+         // Compute forces as usual (not taking into account the robot)
+@@ -1399,8 +1437,28 @@ void AgentManager::computeForces(int id)
+   }
+   else
+   {
+-    otherAgents.push_back(robot_.sfmAgent);
+-    sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
++    if (robot_force_scale_ <= 0.0)
++    {
++      sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
++      agents_[id].sfmAgent.forces.robotSocialForce.set(0.0, 0.0);
++    }
++    else
++    {
++      sfm::Agent scaledRobot = robot_.sfmAgent;
++      scaledRobot.params.forceFactorSocial *= robot_force_scale_;
++
++      utils::Vector2d robotContrib(0.0, 0.0);
++      {
++        sfm::Agent tmp = agents_[id].sfmAgent;
++        std::vector<sfm::Agent> robotOnly = {scaledRobot};
++        sfm::SFM.computeForces(tmp, robotOnly);
++        robotContrib = tmp.forces.socialForce;
++      }
++
++      otherAgents.push_back(scaledRobot);
++      sfm::SFM.computeForces(agents_[id].sfmAgent, otherAgents);
++      agents_[id].sfmAgent.forces.robotSocialForce = robotContrib;
++    }
+   }

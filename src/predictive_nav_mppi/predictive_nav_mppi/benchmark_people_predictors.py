@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
@@ -27,6 +28,8 @@ class Case:
     neigh_xy: List[np.ndarray]
     gt_xy: np.ndarray
     source_name: str = ""
+    frame_index: int = -1
+    robot_obs_xy: Optional[np.ndarray] = None
 
 
 def _speed_magnitudes(obs_xy: np.ndarray, dt: float) -> np.ndarray:
@@ -75,12 +78,13 @@ def _classify_case_tags(
 ) -> Set[str]:
     tags: Set[str] = {"all"}
 
-    n_neigh = len(case.neigh_xy)
-    min_neigh_dist = _min_neighbor_distance(case)
-    if n_neigh > 0 and min_neigh_dist <= interaction_dist:
-        tags.add("interaction")
-    if n_neigh >= dense_neighbors_min:
-        tags.add("dense_interaction")
+    path_len = float(np.sum(np.linalg.norm(case.obs_xy[1:] - case.obs_xy[:-1], axis=1))) if case.obs_xy.shape[0] >= 2 else 0.0
+    displacement = float(np.linalg.norm(case.obs_xy[-1] - case.obs_xy[0])) if case.obs_xy.shape[0] >= 2 else 0.0
+    curvature_ratio = path_len / max(displacement, 1e-6)
+    heading_change_deg = math.degrees(_heading_change(case.obs_xy))
+
+    if heading_change_deg < 30.0:
+        tags.add("linear")
 
     turn_rad = math.radians(max(0.0, turn_threshold_deg))
     if _heading_change(case.obs_xy) >= turn_rad:
@@ -93,16 +97,21 @@ def _classify_case_tags(
         if s_max >= moving_speed_min and s_min <= stop_speed_thresh and (s_max - s_min) >= stop_go_delta:
             tags.add("stop_go")
 
+    n_neigh = len(case.neigh_xy)
+    min_neigh_dist = _min_neighbor_distance(case)
+    if 1 <= n_neigh <= 3 and min_neigh_dist <= interaction_dist:
+        tags.add("interaction")
+    if n_neigh >= 4 and min_neigh_dist <= interaction_dist:
+        tags.add("dense_interaction")
+
     complexity_axes = (
-        int("interaction" in tags)
-        + int("dense_interaction" in tags)
-        + int("turning" in tags)
+        int("turning" in tags)
         + int("stop_go" in tags)
+        + int("interaction" in tags)
+        + int("dense_interaction" in tags)
     )
     if complexity_axes >= 2:
         tags.add("complex")
-    if complexity_axes >= 3:
-        tags.add("very_complex")
 
     return tags
 
@@ -244,6 +253,46 @@ def _ade_fde(pred_xy: np.ndarray, gt_xy: np.ndarray, horizon: int) -> Tuple[floa
     return float(np.mean(d)), float(d[-1])
 
 
+def _smoothness_metrics(
+    pred_xy: np.ndarray,
+    gt_xy: np.ndarray,
+    horizon: int,
+    pred_dt: float,
+) -> Tuple[float, float, float]:
+    p = pred_xy[:horizon]
+    g = gt_xy[:horizon]
+    if p.shape[0] < 3 or g.shape[0] < 3:
+        return 0.0, 0.0, 0.0
+    dt = max(1e-6, float(pred_dt))
+    pv = (p[1:] - p[:-1]) / dt
+    pa = (pv[1:] - pv[:-1]) / dt
+    gv = (g[1:] - g[:-1]) / dt
+    ga = (gv[1:] - gv[:-1]) / dt
+    pred_acc = float(np.mean(np.linalg.norm(pa, axis=1)))
+    if pa.shape[0] >= 2:
+        pj = (pa[1:] - pa[:-1]) / dt
+        pred_jerk = float(np.mean(np.linalg.norm(pj, axis=1)))
+    else:
+        pred_jerk = 0.0
+    acc_error = float(np.mean(np.linalg.norm(pa - ga, axis=1)))
+    return pred_acc, pred_jerk, acc_error
+
+
+def _residual_norm(pred_xy: np.ndarray, kalman_xy: np.ndarray, horizon: int) -> float:
+    diff = pred_xy[:horizon] - kalman_xy[:horizon]
+    return float(np.mean(np.linalg.norm(diff, axis=1)))
+
+
+def _inter_query_jitter(pred_t: np.ndarray, pred_t_next: np.ndarray, horizon: int) -> float:
+    if horizon < 2:
+        return 0.0
+    a = pred_t[1:horizon]
+    b = pred_t_next[: horizon - 1]
+    if a.shape[0] == 0 or a.shape[0] != b.shape[0]:
+        return 0.0
+    return float(np.mean(np.linalg.norm(a - b, axis=1)))
+
+
 def _apply_residual_runtime_postprocess(
     kalman_pred_xy: np.ndarray,
     pred_world: np.ndarray,
@@ -301,8 +350,17 @@ def _build_cases(
     max_neighbors: int,
     stride: int,
     max_cases: int,
+    source_name: str = "",
+    frame_start_fraction: float = 0.0,
+    frame_end_fraction: float = 1.0,
 ) -> List[Case]:
-    frames = dataset["frames"]
+    all_frames = dataset["frames"]
+    n_all = len(all_frames)
+    i0 = int(max(0.0, min(1.0, frame_start_fraction)) * n_all)
+    i1 = int(max(0.0, min(1.0, frame_end_fraction)) * n_all)
+    if i1 <= i0:
+        i1 = n_all
+    frames = all_frames[i0:i1]
     track_map: Dict[int, List[Tuple[float, float, float]]] = {}
     for fr in frames:
         t = float(fr["t"])
@@ -314,6 +372,16 @@ def _build_cases(
         for pid, samples in track_map.items()
         if len(samples) >= 2
     }
+    # Build robot track (optional) from raw frames
+    robot_samples: List[Tuple[float, float, float]] = []
+    for fr in frames:
+        rb = fr.get("robot")
+        if rb is None or rb.get("x") is None:
+            continue
+        robot_samples.append((float(fr["t"]), float(rb["x"]), float(rb["y"])))
+    robot_track_np: Optional[np.ndarray] = None
+    if len(robot_samples) >= 2:
+        robot_track_np = np.asarray(sorted(robot_samples, key=lambda it: it[0]), dtype=np.float64)
     out: List[Case] = []
     for idx in range(0, len(frames), max(1, stride)):
         fr = frames[idx]
@@ -348,7 +416,19 @@ def _build_cases(
                 neigh_list.append(oobs)
             if len(neigh_list) > max_neighbors:
                 neigh_list = neigh_list[:max_neighbors]
-            out.append(Case(t=t0, person_id=pid, obs_xy=obs, neigh_xy=neigh_list, gt_xy=gt, source_name=""))
+            robot_obs = _sample_obs(robot_track_np, t0, obs_len, obs_dt) if robot_track_np is not None else None
+            out.append(
+                Case(
+                    t=t0,
+                    person_id=pid,
+                    obs_xy=obs,
+                    neigh_xy=neigh_list,
+                    gt_xy=gt,
+                    source_name=source_name,
+                    frame_index=int(idx),
+                    robot_obs_xy=robot_obs,
+                )
+            )
             if max_cases > 0 and len(out) >= max_cases:
                 return out
     return out
@@ -361,6 +441,8 @@ def _load_curated_cases(dataset: Dict[str, Any]) -> List[Case]:
         obs_xy = np.asarray(item["obs_xy"], dtype=np.float64)
         gt_xy = np.asarray(item["gt_xy"], dtype=np.float64)
         neigh_xy = [np.asarray(arr, dtype=np.float64) for arr in item.get("neigh_xy", [])]
+        robot_obs = item.get("robot_obs_xy")
+        robot_obs_arr = np.asarray(robot_obs, dtype=np.float64) if robot_obs is not None else None
         out.append(
             Case(
                 t=float(item.get("t", 0.0)),
@@ -369,6 +451,8 @@ def _load_curated_cases(dataset: Dict[str, Any]) -> List[Case]:
                 neigh_xy=neigh_xy,
                 gt_xy=gt_xy,
                 source_name=str(item.get("source_name", "")),
+                frame_index=int(item.get("frame_index", -1)),
+                robot_obs_xy=robot_obs_arr,
             )
         )
     return out
@@ -380,7 +464,13 @@ def _filter_cases_by_horizon(cases: Sequence[Case], max_horizon: int) -> List[Ca
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Offline benchmark for people trajectory predictors.")
-    parser.add_argument("--dataset", required=True, help="Path to JSON dataset from record_people_dataset.")
+    parser.add_argument("--dataset", default="", help="Path to JSON dataset from record_people_dataset (single).")
+    parser.add_argument(
+        "--datasets",
+        nargs="+",
+        default=[],
+        help="Multiple raw datasets (each frame becomes a streaming case); used for stride=1 evaluation.",
+    )
     parser.add_argument("--output_dir", default="benchmark_people_predictors", help="Output folder.")
     parser.add_argument("--obs_len", type=int, default=8)
     parser.add_argument("--obs_dt", type=float, default=0.4)
@@ -402,7 +492,19 @@ def main() -> None:
     parser.add_argument("--residual_scene_model_weights", default="", help="Path to scene-aware residual predictor checkpoint (.pt).")
     parser.add_argument("--residual_model_device", default="")
     parser.add_argument("--residual_alpha", type=float, default=0.3)
-    parser.add_argument("--residual_smoothing_beta", type=float, default=0.8)
+    parser.add_argument(
+        "--residual_smoothing_beta",
+        "--residual_beta",
+        "--residual-beta",
+        dest="residual_smoothing_beta",
+        type=float,
+        default=0.8,
+        help=(
+            "EMA smoothing factor for residual corrections, matching runtime "
+            "residual_smoothing_beta. 0 disables smoothing; higher values keep "
+            "more of the previous residual."
+        ),
+    )
     parser.add_argument("--residual_clip_norm", type=float, default=0.35)
     parser.add_argument("--residual_turn_gate_enable", action="store_true", default=True)
     parser.add_argument("--disable_residual_turn_gate", action="store_true")
@@ -428,42 +530,69 @@ def main() -> None:
     )
     parser.add_argument("--min_split_cases", type=int, default=100)
     parser.add_argument("--interaction_dist", type=float, default=1.5)
-    parser.add_argument("--dense_neighbors_min", type=int, default=3)
+    parser.add_argument("--dense_neighbors_min", type=int, default=4)
     parser.add_argument("--turn_threshold_deg", type=float, default=45.0)
     parser.add_argument("--stop_speed_thresh", type=float, default=0.10)
     parser.add_argument("--moving_speed_min", type=float, default=0.25)
     parser.add_argument("--stop_go_delta", type=float, default=0.25)
+    parser.add_argument(
+        "--streaming_metrics",
+        action="store_true",
+        default=False,
+        help="Compute additional metrics for stride=1 streaming evaluation: pred_acc, acc_error, pred_jerk, residual_norm, inter-query jitter.",
+    )
+    parser.add_argument("--frame_start_fraction", type=float, default=0.0,
+                        help="Fraction of raw frames to skip at the start (e.g. 0.75 to evaluate only the last 25%%; matches curate holdout).")
+    parser.add_argument("--frame_end_fraction", type=float, default=1.0,
+                        help="Fraction of raw frames to keep up to.")
+    parser.add_argument("--inject_robot_as_neighbor", action="store_true", default=False,
+                        help="For models without include_robot, inject robot_obs into neigh_xy as an extra agent (treated as a regular human neighbor). Use to fairly compare old models on react data.")
     args = parser.parse_args()
     if args.disable_residual_turn_gate:
         args.residual_turn_gate_enable = False
     if args.disable_scene_patch_align_to_heading:
         args.scene_patch_align_to_heading = False
 
-    dataset_path = Path(args.dataset).expanduser().resolve()
+    dataset_paths: List[Path] = []
+    if args.datasets:
+        dataset_paths.extend(Path(p).expanduser().resolve() for p in args.datasets)
+    if args.dataset:
+        dataset_paths.append(Path(args.dataset).expanduser().resolve())
+    if not dataset_paths:
+        raise ValueError("Provide --dataset or --datasets")
+    dataset_path = dataset_paths[0]
     out_dir = Path(args.output_dir).expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    data = json.loads(dataset_path.read_text())
     horizons = [int(x.strip()) for x in args.pred_steps.split(",") if x.strip()]
     horizons = sorted(set([h for h in horizons if h > 0]))
     if not horizons:
         raise ValueError("pred_steps must contain at least one positive integer")
     max_h = max(horizons)
 
-    if "cases" in data:
-        cases = _load_curated_cases(data)
-    else:
-        cases = _build_cases(
-            dataset=data,
-            obs_len=args.obs_len,
-            obs_dt=args.obs_dt,
-            pred_steps_max=max_h,
-            pred_dt=args.pred_dt,
-            neighbor_radius=args.neighbor_radius,
-            max_neighbors=args.max_neighbors,
-            stride=args.stride,
-            max_cases=args.max_cases,
-        )
+    cases: List[Case] = []
+    for p in dataset_paths:
+        data = json.loads(p.read_text())
+        if "cases" in data:
+            cases.extend(_load_curated_cases(data))
+        else:
+            src = p.stem.replace("people_dataset_", "").replace("columns_dataset_", "")
+            cases.extend(
+                _build_cases(
+                    dataset=data,
+                    obs_len=args.obs_len,
+                    obs_dt=args.obs_dt,
+                    pred_steps_max=max_h,
+                    pred_dt=args.pred_dt,
+                    neighbor_radius=args.neighbor_radius,
+                    max_neighbors=args.max_neighbors,
+                    stride=args.stride,
+                    max_cases=args.max_cases,
+                    source_name=src,
+                    frame_start_fraction=args.frame_start_fraction,
+                    frame_end_fraction=args.frame_end_fraction,
+                )
+            )
     cases = _filter_cases_by_horizon(cases, max_h)
     if not cases:
         raise RuntimeError(
@@ -558,9 +687,13 @@ def main() -> None:
                 residual_old_device = str(next(residual_old_model.parameters()).device)
             except Exception:
                 residual_old_device = "cpu"
+    residual_scene_include_robot = False
+    residual_scene_k_humans = 3
     if use_residual_scene:
         residual_scene_model, residual_scene_cfg_ckpt = load_residual_checkpoint(residual_scene_path, device=residual_scene_device or None)
         residual_scene_k_neighbors = int(residual_scene_cfg_ckpt.get("k_neighbors", 3))
+        residual_scene_include_robot = bool(residual_scene_cfg_ckpt.get("include_robot", False))
+        residual_scene_k_humans = int(residual_scene_cfg_ckpt.get("k_humans", residual_scene_k_neighbors - (1 if residual_scene_include_robot else 0)))
         residual_scene_pred_len = int(residual_scene_cfg_ckpt.get("pred_len", max_h))
         if not residual_scene_device:
             try:
@@ -599,6 +732,11 @@ def main() -> None:
         for h in horizons
     }
 
+    streaming_enabled = bool(args.streaming_metrics)
+    streaming_preds: Dict[str, List[Optional[np.ndarray]]] = (
+        {name: [None] * len(cases) for name in model_names} if streaming_enabled else {}
+    )
+
     total_cases = len(cases)
     batch_size = max(1, int(args.batch_size))
     progress_step_pct = min(100, max(1, int(args.progress_step_pct)))
@@ -613,10 +751,16 @@ def main() -> None:
             _kalman_predict(case.obs_xy, kalman_rollout_steps, args.obs_dt, args.pred_dt) for case in batch
         ]
 
+        def _neigh_with_robot(case: Case) -> List[np.ndarray]:
+            neighs = [n.astype(np.float32) for n in case.neigh_xy]
+            if args.inject_robot_as_neighbor and case.robot_obs_xy is not None:
+                neighs = [case.robot_obs_xy.astype(np.float32)] + neighs
+            return neighs
+
         gru_preds: List[Optional[np.ndarray]] = [None] * batch_n
         if use_gru and gru_model is not None:
             tracks_obs_xy = [case.obs_xy.astype(np.float32) for case in batch]
-            tracks_neigh_xy = [[n.astype(np.float32) for n in case.neigh_xy] for case in batch]
+            tracks_neigh_xy = [_neigh_with_robot(case) for case in batch]
             tracks_velocity_xy = []
             for case in batch:
                 vel = case.obs_xy[-1] - case.obs_xy[-2] if case.obs_xy.shape[0] >= 2 else np.array([0.0, 0.0])
@@ -642,7 +786,8 @@ def main() -> None:
             )
             for i, case in enumerate(batch):
                 x[:, i, :] = _xy_to_state6(case.obs_xy.astype(np.float64), args.obs_dt)
-                for j, nxy in enumerate(case.neigh_xy[: max(1, args.max_neighbors)]):
+                neigh_list = _neigh_with_robot(case)
+                for j, nxy in enumerate(neigh_list[: max(1, args.max_neighbors)]):
                     neigh[:, i, j, :] = _xy_to_state6(nxy.astype(np.float64), args.obs_dt)
             samples = predict_social_vae_samples(
                 model=vae_model,
@@ -662,7 +807,7 @@ def main() -> None:
                 residual_old_preds[i] = predict_residual_world(
                     model=residual_old_model,
                     obs_xy=case.obs_xy.astype(np.float32),
-                    neigh_xy=[n.astype(np.float32) for n in case.neigh_xy],
+                    neigh_xy=_neigh_with_robot(case),
                     kalman_pred_xy=kalman_preds[i].astype(np.float32),
                     obs_dt=args.obs_dt,
                     device=residual_old_device or "cpu",
@@ -689,14 +834,22 @@ def main() -> None:
         residual_scene_preds: List[Optional[np.ndarray]] = [None] * batch_n
         if use_residual_scene and residual_scene_model is not None:
             for i, case in enumerate(batch):
+                # If model has include_robot=True, robot goes to dedicated slot 0 inside the model.
+                # Otherwise, inject via _neigh_with_robot (only if user passed the flag).
+                neigh_for_scene = (
+                    [n.astype(np.float32) for n in case.neigh_xy]
+                    if residual_scene_include_robot else _neigh_with_robot(case)
+                )
                 residual_scene_preds[i] = predict_residual_world(
                     model=residual_scene_model,
                     obs_xy=case.obs_xy.astype(np.float32),
-                    neigh_xy=[n.astype(np.float32) for n in case.neigh_xy],
+                    neigh_xy=neigh_for_scene,
                     kalman_pred_xy=kalman_preds[i].astype(np.float32),
                     obs_dt=args.obs_dt,
                     device=residual_scene_device or "cpu",
-                    k_neighbors=residual_scene_k_neighbors,
+                    k_neighbors=residual_scene_k_humans,
+                    include_robot=residual_scene_include_robot,
+                    robot_obs_xy=case.robot_obs_xy.astype(np.float32) if case.robot_obs_xy is not None else None,
                     scene_source_name=str(case.source_name or ""),
                     scene_patch_cfg=residual_scene_cfg,
                     residual_alpha=float(args.residual_alpha)
@@ -728,6 +881,16 @@ def main() -> None:
             tags = case_tags[start + i]
             active_splits = [sp for sp in split_names if _case_in_split(tags, sp)]
             source_name = case.source_name.strip() or "dataset"
+            if streaming_enabled:
+                streaming_preds["kalman"][start + i] = np.asarray(pred_kalman, dtype=np.float64)[:max_h]
+                if pred_gru is not None:
+                    streaming_preds["social_gru"][start + i] = np.asarray(pred_gru, dtype=np.float64)[:max_h]
+                if pred_vae is not None:
+                    streaming_preds["social_vae"][start + i] = np.asarray(pred_vae, dtype=np.float64)[:max_h]
+                if pred_residual_old is not None:
+                    streaming_preds["residual_old"][start + i] = np.asarray(pred_residual_old, dtype=np.float64)[:max_h]
+                if pred_residual_scene is not None:
+                    streaming_preds["residual_scene"][start + i] = np.asarray(pred_residual_scene, dtype=np.float64)[:max_h]
             for h in horizons:
                 stage_seg = _stage_segments(h)
                 source_metric[h].setdefault(
@@ -825,12 +988,21 @@ def main() -> None:
 
     summary: Dict[str, Any] = {
         "dataset": str(dataset_path),
+        "datasets": [str(p) for p in dataset_paths],
         "n_cases": len(cases),
         "settings": {
             "obs_len": args.obs_len,
             "obs_dt": args.obs_dt,
             "pred_dt": args.pred_dt,
             "horizons": horizons,
+            "streaming_metrics": streaming_enabled,
+            "stride": args.stride,
+            "residual_alpha": float(args.residual_alpha),
+            "residual_smoothing_beta": float(args.residual_smoothing_beta),
+            "residual_clip_norm": float(args.residual_clip_norm),
+            "residual_turn_gate_enable": bool(args.residual_turn_gate_enable),
+            "residual_turn_gate_tau": float(args.residual_turn_gate_tau),
+            "residual_turn_gate_alpha": float(args.residual_turn_gate_alpha),
         },
         "metrics": {},
         "paired_permutation_p": {},
@@ -848,6 +1020,8 @@ def main() -> None:
             "stop_go_delta": args.stop_go_delta,
         },
     }
+    if streaming_enabled:
+        summary["streaming_metrics"] = {}
 
     for h in horizons:
         key = f"h{h}"
@@ -921,6 +1095,84 @@ def main() -> None:
     for split in split_names:
         summary["case_split_counts"][split] = int(sum(1 for t in case_tags if _case_in_split(t, split)))
 
+    if streaming_enabled:
+        streaming_metrics_buf: Dict[int, Dict[str, Dict[str, List[float]]]] = {
+            h: {
+                name: {"pred_acc": [], "pred_jerk": [], "acc_error": [], "residual_norm": [], "jitter": []}
+                for name in model_names
+            }
+            for h in horizons
+        }
+        gt_acc_norm_buf: Dict[int, List[float]] = {h: [] for h in horizons}
+        for h in horizons:
+            for i, case in enumerate(cases):
+                kalman_pred = streaming_preds["kalman"][i]
+                _, _, gt_only = _smoothness_metrics(case.gt_xy, case.gt_xy, h, args.pred_dt)
+                gt_acc_norm_buf[h].append(0.0)
+                if case.gt_xy.shape[0] >= 3:
+                    dt = max(1e-6, float(args.pred_dt))
+                    gv = (case.gt_xy[1:h] - case.gt_xy[: h - 1]) / dt
+                    if gv.shape[0] >= 2:
+                        ga = (gv[1:] - gv[:-1]) / dt
+                        gt_acc_norm_buf[h][-1] = float(np.mean(np.linalg.norm(ga, axis=1)))
+                for name in model_names:
+                    pred = streaming_preds[name][i]
+                    if pred is None:
+                        continue
+                    p_acc, p_jerk, acc_err = _smoothness_metrics(pred, case.gt_xy, h, args.pred_dt)
+                    streaming_metrics_buf[h][name]["pred_acc"].append(p_acc)
+                    streaming_metrics_buf[h][name]["pred_jerk"].append(p_jerk)
+                    streaming_metrics_buf[h][name]["acc_error"].append(acc_err)
+                    if name != "kalman" and kalman_pred is not None:
+                        streaming_metrics_buf[h][name]["residual_norm"].append(
+                            _residual_norm(pred, kalman_pred, h)
+                        )
+
+        groups: Dict[Tuple[str, int], List[Tuple[int, int]]] = defaultdict(list)
+        for i, case in enumerate(cases):
+            groups[(case.source_name, case.person_id)].append((case.frame_index, i))
+        jitter_pairs = 0
+        for key, items in groups.items():
+            items.sort()
+            for j in range(len(items) - 1):
+                fi_a, idx_a = items[j]
+                fi_b, idx_b = items[j + 1]
+                if fi_a < 0 or fi_b < 0:
+                    continue
+                if fi_b - fi_a != 1:
+                    continue
+                jitter_pairs += 1
+                for h in horizons:
+                    for name in model_names:
+                        pred_a = streaming_preds[name][idx_a]
+                        pred_b = streaming_preds[name][idx_b]
+                        if pred_a is None or pred_b is None:
+                            continue
+                        streaming_metrics_buf[h][name]["jitter"].append(
+                            _inter_query_jitter(pred_a, pred_b, h)
+                        )
+
+        for h in horizons:
+            key = f"h{h}"
+            summary["streaming_metrics"][key] = {
+                "gt_acc_mean": float(np.mean(gt_acc_norm_buf[h])) if gt_acc_norm_buf[h] else 0.0,
+            }
+            for name in model_names:
+                block = streaming_metrics_buf[h][name]
+                if not block["pred_acc"]:
+                    continue
+                entry: Dict[str, Any] = {
+                    "pred_acc": _summary(block["pred_acc"]),
+                    "pred_jerk": _summary(block["pred_jerk"]),
+                    "acc_error": _summary(block["acc_error"]),
+                }
+                if block["residual_norm"]:
+                    entry["residual_norm"] = _summary(block["residual_norm"])
+                if block["jitter"]:
+                    entry["jitter"] = _summary(block["jitter"])
+                summary["streaming_metrics"][key][name] = entry
+        summary["streaming_metrics"]["jitter_pairs"] = jitter_pairs
+
     (out_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2))
 
     lines = []
@@ -974,6 +1226,41 @@ def main() -> None:
                         f"      {model_name:10s} ADE={ade['mean']:.3f}±{ade['std']:.3f} "
                         f"FDE={fde['mean']:.3f}±{fde['std']:.3f} n={ade['n']}"
                     )
+
+    if streaming_enabled and summary.get("streaming_metrics"):
+        sm = summary["streaming_metrics"]
+        lines.append("")
+        lines.append(f"Streaming metrics (jitter pairs={sm.get('jitter_pairs', 0)}):")
+        for h in horizons:
+            hk = f"h{h}"
+            block_h = sm.get(hk, {})
+            if not block_h:
+                continue
+            gt_acc = block_h.get("gt_acc_mean", 0.0)
+            lines.append(f"  H={h} (gt_acc_mean={gt_acc:.4f})")
+            header = (
+                f"    {'model':14s} {'ADE':>7s} {'FDE':>7s} "
+                f"{'pred_acc':>9s} {'acc_err':>9s} {'pred_jerk':>10s} "
+                f"{'jitter':>8s} {'res_norm':>9s}"
+            )
+            lines.append(header)
+            for model_name in model_names:
+                if model_name not in block_h:
+                    continue
+                entry = block_h[model_name]
+                ade_block = summary["metrics"].get(hk, {}).get(model_name, {}).get("ade", {})
+                fde_block = summary["metrics"].get(hk, {}).get(model_name, {}).get("fde", {})
+                ade_v = ade_block.get("mean", float("nan"))
+                fde_v = fde_block.get("mean", float("nan"))
+                jitter_v = entry.get("jitter", {}).get("mean", float("nan"))
+                resn_v = entry.get("residual_norm", {}).get("mean", float("nan"))
+                lines.append(
+                    f"    {model_name:14s} {ade_v:7.3f} {fde_v:7.3f} "
+                    f"{entry['pred_acc']['mean']:9.4f} {entry['acc_error']['mean']:9.4f} "
+                    f"{entry['pred_jerk']['mean']:10.4f} "
+                    f"{jitter_v:8.4f} {resn_v:9.4f}"
+                )
+
     report = "\n".join(lines) + "\n"
     print(report)
     (out_dir / "report.txt").write_text(report)

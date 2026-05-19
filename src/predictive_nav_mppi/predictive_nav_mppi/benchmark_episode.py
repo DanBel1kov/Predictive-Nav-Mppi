@@ -225,13 +225,19 @@ class BenchmarkEpisode(Node):
                 dy = self._positions[i][2] - self._positions[i - 1][2]
                 path_length += math.hypot(dx, dy)
 
-        min_dist = min(self._min_dists) if self._min_dists else float("inf")
+        finite_min_dists = [d for d in self._min_dists if math.isfinite(d)]
+        min_dist = min(finite_min_dists) if finite_min_dists else float("nan")
+        avg_dist = (
+            sum(finite_min_dists) / len(finite_min_dists)
+            if finite_min_dists else float("nan")
+        )
 
         results = {
             "status": self._nav_result,
             "time_to_goal": round(total_time, 3),
             "path_length": round(path_length, 4),
             "min_dist": round(min_dist, 4),
+            "avg_dist": round(avg_dist, 4),
             "collision_count": self._collision_events,
             "viol_time": round(self._viol_time, 3),
             "samples": len(self._positions),

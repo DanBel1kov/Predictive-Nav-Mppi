@@ -415,13 +415,13 @@ def generate_launch_description():
 
 
     gzclient = ExecuteProcess(
-        condition=IfCondition(LaunchConfiguration('gui')),
+        condition=IfCondition(LaunchConfiguration('gzclient')),
         cmd=['gzclient'],
         output='screen',
     )
 
     spawn_waffle = TimerAction(
-        period=5.0,
+        period=10.0,
         actions=[ExecuteProcess(
             cmd=[
                 'ros2', 'run', 'gazebo_ros', 'spawn_entity.py',
@@ -449,10 +449,11 @@ def generate_launch_description():
     )
 
     # Nav2 bringup + RViz в одном месте (не запускаем rviz руками отдельно)
-    nav2 = IncludeLaunchDescription(
+    nav2_full = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([pkg_nav2, 'launch', 'bringup_launch.py'])
         ),
+        condition=UnlessCondition(LaunchConfiguration('nav2_minimal')),
         launch_arguments={
             'use_sim_time': use_sim_time,
             'slam': 'False',
@@ -463,9 +464,21 @@ def generate_launch_description():
         }.items()
     )
 
+    nav2_min = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([pkg_self, 'launch', 'nav2_minimal.launch.py'])
+        ),
+        condition=IfCondition(LaunchConfiguration('nav2_minimal')),
+        launch_arguments={
+            'use_sim_time': use_sim_time,
+            'map': map_yaml,
+            'params_file': params_file,
+        }.items()
+    )
+
     nav2_delayed = TimerAction(
-        period=6.0,
-        actions=[nav2]
+        period=14.0,
+        actions=[nav2_full, nav2_min]
     )
 
     rviz_delayed  = TimerAction(
@@ -524,6 +537,7 @@ def generate_launch_description():
     residual_alpha = LaunchConfiguration('residual_alpha', default='0.3')
     residual_smoothing_beta = LaunchConfiguration('residual_smoothing_beta', default='0.8')
     residual_clip_norm = LaunchConfiguration('residual_clip_norm', default='0.35')
+    residual_away_clip_norm = LaunchConfiguration('residual_away_clip_norm', default='0.0')
     residual_turn_gate_enable = LaunchConfiguration('residual_turn_gate_enable', default='True')
     residual_turn_gate_tau = LaunchConfiguration('residual_turn_gate_tau', default='0.1')
     residual_turn_gate_alpha = LaunchConfiguration('residual_turn_gate_alpha', default='30.0')
@@ -536,6 +550,7 @@ def generate_launch_description():
     social_vae_config_path = LaunchConfiguration('social_vae_config_path', default='')
     social_vae_device = LaunchConfiguration('social_vae_device', default='')
     social_vae_pred_samples = LaunchConfiguration('social_vae_pred_samples', default='20')
+    social_vae_pred_steps_use = LaunchConfiguration('social_vae_pred_steps_use', default='26')
     predict_robot_as_agent = LaunchConfiguration('predict_robot_as_agent', default='False')
 
     people_predictor = Node(
@@ -560,6 +575,7 @@ def generate_launch_description():
             'track_timeout': 1.0,
             'max_people': 100,
             'publish_markers': True,
+            'publish_cloud': False,
             'publish_ellipses': True,
             'ellipse_steps': 4,
             'frame_id_override': '',
@@ -569,6 +585,7 @@ def generate_launch_description():
             'residual_alpha': residual_alpha,
             'residual_smoothing_beta': residual_smoothing_beta,
             'residual_clip_norm': residual_clip_norm,
+            'residual_away_clip_norm': residual_away_clip_norm,
             'residual_turn_gate_enable': residual_turn_gate_enable,
             'residual_turn_gate_tau': residual_turn_gate_tau,
             'residual_turn_gate_alpha': residual_turn_gate_alpha,
@@ -592,7 +609,7 @@ def generate_launch_description():
             'social_vae_ob_radius': 2.0,
             'social_vae_hidden_dim': 256,
             'social_vae_obs_dt': 0.4,
-            'social_vae_pred_steps_use': 26,
+            'social_vae_pred_steps_use': social_vae_pred_steps_use,
             'social_vae_pred_samples': social_vae_pred_samples,
             'social_vae_max_neighbors': 16,
             'social_vae_neighbor_pad': 1e9,
@@ -606,7 +623,12 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='True'),
-        DeclareLaunchArgument('gui', default_value='True'),
+        DeclareLaunchArgument('gui', default_value='True',
+                              description='Master GUI flag - controls RViz visibility'),
+        DeclareLaunchArgument('gzclient', default_value='True',
+                              description='Gazebo client (3D view) visibility - set False to save CPU'),
+        DeclareLaunchArgument('nav2_minimal', default_value='False',
+                              description='Use minimal nav2 (no smoother/behavior/waypoint_follower/velocity_smoother). Saves CPU; no recoveries.'),
         DeclareLaunchArgument('sim_speedup', default_value='1.0',
                               description='Requested simulation speedup factor via world physics override'),
         DeclareLaunchArgument('sim_max_step_size', default_value='0.0',
@@ -647,6 +669,8 @@ def generate_launch_description():
                               description='EMA smoothing for residual correction over time; 0 disables smoothing'),
         DeclareLaunchArgument('residual_clip_norm', default_value='0.35',
                               description='Max norm of residual correction per future step in meters; 0 disables clipping'),
+        DeclareLaunchArgument('residual_away_clip_norm', default_value='0.0',
+                              description='Max outward-from-robot radial residual per future step in meters; 0 disables asymmetric clipping'),
         DeclareLaunchArgument('residual_turn_gate_enable', default_value='True',
                               description='Enable analytic turn-based gate for residual correction'),
         DeclareLaunchArgument('residual_turn_gate_tau', default_value='0.1',
@@ -665,6 +689,8 @@ def generate_launch_description():
                               description='Optional path to SocialVAE config .py (e.g. config/hotel.py)'),
         DeclareLaunchArgument('social_vae_device', default_value='',
                               description='SocialVAE device: "" auto, or cpu/cuda'),
+        DeclareLaunchArgument('social_vae_pred_steps_use', default_value='26',
+                              description='How many prediction steps to publish from SocialVAE backend (capped to model horizon; beyond model horizon, CV-extrapolation is used)'),
         DeclareLaunchArgument('social_vae_pred_samples', default_value='20',
                               description='Number of SocialVAE sampled futures per person'),
 

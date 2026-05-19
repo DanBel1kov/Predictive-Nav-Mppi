@@ -47,6 +47,17 @@ def default_scene_map_path(source_name: str) -> Path:
         "world2": maps_dir / "nonlinear_corridor_map.yaml",
         "nonlinear_corridor": maps_dir / "nonlinear_corridor_map.yaml",
         "long_corridor": maps_dir / "long_corridor_map.yaml",
+        "react_long_custom": maps_dir / "long_corridor_map.yaml",
+        "react_long_standart": maps_dir / "long_corridor_map.yaml",
+        "react_nonlinear": maps_dir / "nonlinear_corridor_map.yaml",
+        "react_nonlinear_standart": maps_dir / "nonlinear_corridor_map.yaml",
+        "react_labyrimth_turns_custom": maps_dir / "labyrinth_turns_map.yaml",
+        "long_corridor_react_better_rft": maps_dir / "long_corridor_map.yaml",
+        "labyrinth_react_test_better_rft": maps_dir / "labyrinth_turns_map.yaml",
+        "nonlinear_corridor_react_better_rft": maps_dir / "nonlinear_corridor_map.yaml",
+        "long_corridor_v5loop": maps_dir / "long_corridor_map.yaml",
+        "labyrinth_v5loop": maps_dir / "labyrinth_turns_map.yaml",
+        "nonlinear_v5loop": maps_dir / "nonlinear_corridor_map.yaml",
     }
     key = str(source_name).strip().lower()
     if key not in mapping:

@@ -14,7 +14,7 @@ def _make_nodes(context, *args, **kwargs):
     # LaunchConfiguration resolves to a string; hunav_* nodes declare use_sim_time as bool.
     use_sim_time = str(use_sim_time_raw).lower() in ('true', '1', 'yes', 'on')
     humans_ignore_robot = str(humans_ignore_robot_raw).lower() in ('true', '1', 'yes', 'on')
-    robot_force_scale = float(robot_force_scale_raw)
+    robot_force_scale = 0.0 if humans_ignore_robot else float(robot_force_scale_raw)
 
     if behavior_tree_path.strip():
         bt_dir = behavior_tree_path
@@ -24,7 +24,11 @@ def _make_nodes(context, *args, **kwargs):
         )
 
     robot_name = 'waffle'
-    ignored_models = 'waffle' if humans_ignore_robot else ''
+    # Keep the robot out of Gazebo obstacle extraction for pedestrians.
+    # Robot-to-human reaction is controlled by robot_force_scale in
+    # hunav_agent_manager, so 0.02 means 2% social reaction instead of
+    # full obstacle reaction plus 2% social force.
+    ignored_models = 'waffle'
 
     worldgen = Node(
         package='hunav_gazebo_wrapper',
@@ -34,10 +38,8 @@ def _make_nodes(context, *args, **kwargs):
         parameters=[{
             'base_world': base_world,
             'use_gazebo_obs': True,
-            'use_collision': not humans_ignore_robot,
-            # Proxying compute_agents adds service overhead; lower rate prevents
-            # request timeouts and preserves human-human interactions.
-            'update_rate': 20.0 if humans_ignore_robot else 100.0,
+            'use_collision': False,
+            'update_rate': 20.0,
             'robot_name': robot_name,
             'global_frame_to_publish': 'map',
             'use_navgoal_to_start': False,
@@ -70,10 +72,6 @@ def _make_nodes(context, *args, **kwargs):
             'behavior_tree_path': bt_dir,
             'robot_force_scale': robot_force_scale,
         }],
-        remappings=(
-            [('compute_agents', 'compute_agents_raw')]
-            if humans_ignore_robot else []
-        ),
     )
 
     # hunav_agent_manager needs get_parameters from hunav_loader; delay so service is ready
@@ -82,22 +80,6 @@ def _make_nodes(context, *args, **kwargs):
         TimerAction(period=1.0, actions=[worldgen]),
         TimerAction(period=3.0, actions=[hunav_manager_node]),
     ]
-
-    if humans_ignore_robot:
-        nodes.append(
-            Node(
-                package='predictive_nav_mppi',
-                executable='compute_agents_proxy',
-                name='compute_agents_proxy',
-                output='screen',
-                parameters=[{
-                    'backend_service': 'compute_agents_raw',
-                    'frontend_service': 'compute_agents',
-                    'robot_mask_distance': 10000.0,
-                    'robot_force_scale': robot_force_scale,
-                }],
-            )
-        )
 
     return nodes
 

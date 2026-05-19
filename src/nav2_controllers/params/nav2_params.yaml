@@ -69,7 +69,7 @@ controller_server:
       v_still_thresh: 0.05
 
       lambda: 1.0
-      debug_rollouts_enabled: true
+      debug_rollouts_enabled: false
       debug_rollouts_top_n: 10
       debug_rollouts_line_width: 0.02
       debug_rollouts_topic: /mppi_debug_rollouts

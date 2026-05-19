@@ -1,0 +1,33 @@
+Curated dataset report: /home/danbel1kov/predictive-nav-mppi/datasets/curated_people
+
+### TRAIN: 7195 samples (avg_score=4.7485, linear_cases=397)
+
+== train — by source scene (total: 7195) ==
+  labyrinth_turns                3213  ( 44.7%)
+  corridor_v2                    2514  ( 34.9%)
+  world2                         1468  ( 20.4%)
+
+== train — by movement tag (total: 7195) ==
+  all                            7195  (100.0%)
+  interaction                    5394  ( 75.0%)
+  complex                        3320  ( 46.1%)
+  dense_interaction              2703  ( 37.6%)
+  turning                        1938  ( 26.9%)
+  very_complex                    891  ( 12.4%)
+  stop_go                          34  (  0.5%)
+
+### BENCHMARK: 2144 samples (avg_score=5.0787, linear_cases=121)
+
+== benchmark — by source scene (total: 2144) ==
+  labyrinth_turns                1006  ( 46.9%)
+  corridor_v2                     702  ( 32.7%)
+  world2                          436  ( 20.3%)
+
+== benchmark — by movement tag (total: 2144) ==
+  all                            2144  (100.0%)
+  interaction                    1614  ( 75.3%)
+  complex                        1132  ( 52.8%)
+  dense_interaction              1020  ( 47.6%)
+  turning                         529  ( 24.7%)
+  very_complex                    294  ( 13.7%)
+  stop_go                          13  (  0.6%)

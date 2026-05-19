@@ -1,0 +1,101 @@
+{
+  "created_at_utc": "2026-03-23T15:45:20.364101+00:00",
+  "inputs": [
+    "/home/danbel1kov/predictive-nav-mppi/datasets/labyrinth_turns/people_dataset_labyrinth_turns.json",
+    "/home/danbel1kov/predictive-nav-mppi/datasets/columns_dataset_world2.json",
+    "/home/danbel1kov/predictive-nav-mppi/datasets/people_dataset_corridor_v2.json"
+  ],
+  "config": {
+    "obs_len": 8,
+    "obs_dt": 0.4,
+    "pred_len": 26,
+    "pred_dt": 0.4,
+    "stride": 5,
+    "neighbor_radius": 2.0,
+    "max_neighbors": 16,
+    "holdout_fraction": 0.25,
+    "train_target": 0,
+    "benchmark_target": 0,
+    "min_gap_frames": 15,
+    "max_linear_fraction": 0.35
+  },
+  "candidates": {
+    "total": 32245,
+    "by_partition": {
+      "train": 24835,
+      "benchmark": 7410
+    },
+    "tag_counts": {
+      "train": {
+        "all": 24835,
+        "complex": 10282,
+        "dense_interaction": 8854,
+        "interaction": 18261,
+        "stop_go": 101,
+        "turning": 5114,
+        "very_complex": 2400
+      },
+      "benchmark": {
+        "all": 7410,
+        "complex": 3676,
+        "dense_interaction": 3396,
+        "interaction": 5483,
+        "stop_go": 35,
+        "turning": 1408,
+        "very_complex": 754
+      }
+    },
+    "source_counts": {
+      "train": {
+        "corridor_v2": 8380,
+        "labyrinth_turns": 11325,
+        "world2": 5130
+      },
+      "benchmark": {
+        "corridor_v2": 2360,
+        "labyrinth_turns": 3550,
+        "world2": 1500
+      }
+    }
+  },
+  "selected": {
+    "train": {
+      "count": 7195,
+      "avg_score": 4.748485,
+      "tag_counts": {
+        "all": 7195,
+        "complex": 3320,
+        "dense_interaction": 2703,
+        "interaction": 5394,
+        "stop_go": 34,
+        "turning": 1938,
+        "very_complex": 891
+      },
+      "source_counts": {
+        "corridor_v2": 2514,
+        "labyrinth_turns": 3213,
+        "world2": 1468
+      },
+      "linear_cases": 397
+    },
+    "benchmark": {
+      "count": 2144,
+      "avg_score": 5.07872,
+      "tag_counts": {
+        "all": 2144,
+        "complex": 1132,
+        "dense_interaction": 1020,
+        "interaction": 1614,
+        "stop_go": 13,
+        "turning": 529,
+        "very_complex": 294
+      },
+      "source_counts": {
+        "corridor_v2": 702,
+        "labyrinth_turns": 1006,
+        "world2": 436
+      },
+      "linear_cases": 121
+    }
+  }
+}

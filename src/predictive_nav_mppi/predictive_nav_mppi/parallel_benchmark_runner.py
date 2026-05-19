@@ -312,8 +312,14 @@ def main():
             ("Time-to-goal  (s)", "time_to_goal"),
             ("Path length   (m)", "path_length"),
             ("Min distance  (m)", "min_dist"),
+            ("Avg distance  (m)", "avg_dist"),
             ("Collisions      ", "collision_count"),
             ("Violation time(s)", "viol_time"),
+            ("Robot influence ", "avg_robot_influence"),
+            ("Nearest rob infl", "nearest_robot_influence"),
+            ("Peak rob infl   ", "peak_robot_influence"),
+            ("Close rob infl  ", "close_robot_influence"),
+            ("Robot infl AUC  ", "robot_influence_auc"),
         ]:
             s = _stats([r.get(key) for r in ok])
             print(
